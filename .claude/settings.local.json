@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(timeout 10 npm run server:*)",
+      "Bash(ping:*)",
+      "Bash(curl:*)",
+      "Bash(nslookup:*)",
+      "Bash(node:*)",
+      "Bash(git init:*)"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "scanDate": "2023-10-27T14:30:00.000Z",
+    "projectName": "legacy-payment-gateway",
+    "totalFiles": 142,
+    "sloc": 12500
+  },
+  "score": {
+    "total": 68,
+    "breakdown": {
+      "coupling": 45,
+      "freshness": 60,
+      "cleanliness": 95
+    }
+  },
+  "issues": {
+    "circularDependencies": [
+      ["src/services/PaymentService.ts", "src/utils/AuthHelper.ts"],
+      ["src/components/Header.tsx", "src/contexts/UserContext.tsx", "src/hooks/useNavigation.ts"],
+      ["src/models/Order.ts", "src/models/User.ts"]
+    ],
+    "unusedExports": [
+      { "file": "src/utils/dateFormatter.ts", "symbol": "formatIsoDate" },
+      { "file": "src/utils/dateFormatter.ts", "symbol": "getWeekNumber" },
+      { "file": "src/components/OldButton.tsx", "symbol": "default" },
+      { "file": "src/hooks/useDebounce.ts", "symbol": "useDebounceImmediate" },
+      { "file": "src/api/deprecated/v1.ts", "symbol": "fetchUserData" }
+    ],
+    "outdatedDependencies": [
+      { "package": "react", "current": "16.8.6", "latest": "18.2.0", "severity": "High" },
+      { "package": "react-dom", "current": "16.8.6", "latest": "18.2.0", "severity": "High" },
+      { "package": "lodash", "current": "4.17.15", "latest": "4.17.21", "severity": "Low" },
+      { "package": "axios", "current": "0.19.2", "latest": "1.6.0", "severity": "Medium" },
+      { "package": "moment", "current": "2.24.0", "latest": "2.29.4", "severity": "Medium" },
+      { "package": "node-sass", "current": "4.14.1", "latest": "9.0.0", "severity": "High" },
+      { "package": "typescript", "current": "3.9.7", "latest": "5.2.2", "severity": "Medium" },
+      { "package": "webpack", "current": "4.44.2", "latest": "5.89.0", "severity": "High" },
+      { "package": "jest", "current": "26.6.3", "latest": "29.7.0", "severity": "Medium" },
+      { "package": "eslint", "current": "7.32.0", "latest": "8.52.0", "severity": "Low" }
+    ]
+  }
+}

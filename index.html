@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bridge // Command Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Tektur:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              // Deep Space Backgrounds
+              bg: {
+                900: '#050505',
+                800: '#0a0a0a',
+                700: '#121212',
+              },
+              // The Apex Orange
+              apex: {
+                400: '#ff7b00',
+                500: '#ff5e00',
+                600: '#cc4b00',
+              },
+              slate: {
+                850: '#1e293b',
+              }
+            },
+            fontFamily: {
+              sans: ['Tektur', 'sans-serif'], // Robotic headers
+              mono: ['JetBrains Mono', 'monospace'], // Data text
+            },
+            backgroundImage: {
+              'grid-pattern': "linear-gradient(to right, #1f2937 1px, transparent 1px), linear-gradient(to bottom, #1f2937 1px, transparent 1px)",
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+      body {
+        background-color: #050505;
+        color: #e2e8f0;
+      }
+      /* Tech Grid Background */
+      .bg-tech-grid {
+        background-size: 40px 40px;
+        background-image: linear-gradient(to right, rgba(255, 94, 0, 0.05) 1px, transparent 1px),
+                          linear-gradient(to bottom, rgba(255, 94, 0, 0.05) 1px, transparent 1px);
+      }
+      
+      /* Sharp Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #0a0a0a; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #333; 
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #ff5e00; 
+      }
+
+      /* CRT Flicker Effect Animation */
+      @keyframes flicker {
+        0% { opacity: 0.97; }
+        5% { opacity: 0.95; }
+        10% { opacity: 0.9; }
+        15% { opacity: 0.95; }
+        20% { opacity: 0.99; }
+        100% { opacity: 0.97; }
+      }
+      .crt-flicker {
+        animation: flicker 4s infinite;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "path": "https://aistudiocdn.com/path@^0.12.7",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.554.0",
+    "fs/": "https://aistudiocdn.com/fs@^0.0.1-security/",
+    "recharts": "https://aistudiocdn.com/recharts@^3.5.0",
+    "glob": "https://aistudiocdn.com/glob@^13.0.0",
+    "madge": "https://aistudiocdn.com/madge@^8.0.0",
+    "npm-check-updates": "https://aistudiocdn.com/npm-check-updates@^19.1.2",
+    "util": "https://aistudiocdn.com/util@^0.12.5",
+    "child_process": "https://aistudiocdn.com/child_process@^1.0.2",
+    "axios": "https://aistudiocdn.com/axios@^1.13.2",
+    "dotenv": "https://aistudiocdn.com/dotenv@^17.2.3",
+    "cors": "https://aistudiocdn.com/cors@^2.8.5",
+    "express": "https://aistudiocdn.com/express@^5.1.0",
+    "simple-git": "https://aistudiocdn.com/simple-git@^3.30.0",
+    "fs-extra": "https://aistudiocdn.com/fs-extra@^11.3.2",
+    "sqlite3": "https://aistudiocdn.com/sqlite3@^5.1.7",
+    "sqlite": "https://aistudiocdn.com/sqlite@^5.1.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body class="bg-bg-900 min-h-screen bg-tech-grid overflow-x-hidden selection:bg-apex-500 selection:text-black">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "score": 0,
+  "forecast": [
+    {
+      "period": "1 month",
+      "predictedScore": 0,
+      "confidence": "medium"
+    },
+    {
+      "period": "3 months",
+      "predictedScore": 0,
+      "confidence": "low"
+    },
+    {
+      "period": "6 months",
+      "predictedScore": 0,
+      "confidence": "low"
+    }
+  ],
+  "insights": [
+    {
+      "category": "Architecture",
+      "severity": "critical",
+      "description": "Description of the issue",
+      "impact": "Impact on the codebase"
+    }
+  ],
+  "prioritization": [
+    {
+      "rank": 1,
+      "task": "Task description",
+      "effort": "medium",
+      "impact": "high",
+      "reasoning": "Why this should be prioritized"
+    }
+  ],
+  "summary": "Overall analysis summary"
+}
