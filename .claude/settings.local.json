@@ -8,7 +8,8 @@
       "Bash(curl:*)",
       "Bash(nslookup:*)",
       "Bash(node:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(npm install)"
     ]
   }
 }

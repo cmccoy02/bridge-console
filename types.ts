@@ -249,3 +249,56 @@ export interface BridgeMetrics {
     summary: string;
   };
 }
+
+// ===== AGENT TYPES =====
+
+export type AgentType =
+  | 'package-update'
+  | 'unused-deps'
+  | 'security-audit'
+  | 'code-cleanup';
+
+export interface AgentConfig {
+  autoApprove?: boolean;
+  createPR?: boolean;
+  branchPrefix?: string;
+  // Package update specific
+  updateStrategy?: 'patch' | 'minor' | 'major';
+  excludePackages?: string[];
+  // Code cleanup specific
+  removeConsoleLogs?: boolean;
+  removeTodos?: boolean;
+}
+
+export type AgentRunStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface Agent {
+  id: number;
+  userId: number;
+  name: string;
+  type: AgentType;
+  config: AgentConfig;
+  schedule: string | null;
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentRunResult {
+  success: boolean;
+  changes?: string[];
+  errors?: string[];
+  prUrl?: string;
+}
+
+export interface AgentRun {
+  id: number;
+  agentId: number;
+  repositoryId: number;
+  status: AgentRunStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  result: AgentRunResult | null;
+  logs: string | null;
+  createdAt: string;
+}

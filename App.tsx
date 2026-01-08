@@ -16,7 +16,7 @@ import ErrorBoundary, { InlineError } from './components/ErrorBoundary';
 import ActionableTasks from './components/ActionableTasks';
 import { validateGitHubUrl, type ValidationResult } from './utils/validation';
 import mockData from './mock-bridge-metrics.json';
-import { 
+import {
   Terminal,
   Activity,
   ShieldAlert,
@@ -34,13 +34,17 @@ import {
   LogOut,
   Search,
   SlidersHorizontal,
-  ArrowUpDown
+  ArrowUpDown,
+  Bot,
+  Link as LinkIcon
 } from 'lucide-react';
+import GitHubBrowser from './components/GitHubBrowser';
 
-const API_URL = '/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabType = 'overview' | 'packages' | 'insights';
+type TabType = 'overview' | 'packages' | 'insights' | 'agents';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
+type AddRepoMode = 'url' | 'browse';
 
 interface Repository {
   id: number;
@@ -55,7 +59,7 @@ interface Repository {
 
 // Wrapped App component with auth
 const AppContent: React.FC = () => {
-  const { user, logout, isLoading: authLoading } = useAuth();
+  const { user, logout, isLoading: authLoading, handleOAuthCallback } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('repositories');
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
@@ -80,6 +84,24 @@ const AppContent: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'score' | 'date'>('date');
   const [filterNeedsAttention, setFilterNeedsAttention] = useState(false);
+  const [addRepoMode, setAddRepoMode] = useState<AddRepoMode>('browse');
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code) {
+      handleOAuthCallback(code)
+        .then(() => {
+          // Clear the URL params
+          window.history.replaceState({}, '', window.location.pathname);
+        })
+        .catch((err) => {
+          console.error('OAuth callback failed:', err);
+          window.history.replaceState({}, '', window.location.pathname);
+        });
+    }
+  }, [handleOAuthCallback]);
 
   // Check backend connection and load repositories
   // NOTE: This hook must be called unconditionally before any early returns
@@ -90,15 +112,15 @@ const AppContent: React.FC = () => {
     const checkBackend = async () => {
       try {
         console.log('[Bridge] Checking backend connection...');
-        const res = await fetch(`${API_URL}/health`);
+        const res = await fetch(`${API_URL}/api/health`);
         if (res.ok) {
           const data = await res.json();
           console.log('[Bridge] Backend connected:', data);
           setBackendConnected(true);
           if (!data.hasGitHubToken) {
-            setError('⚠️ Backend running but GITHUB_TOKEN not found. Add it to your .env file.');
+            setError('Backend running but GITHUB_TOKEN not found. Add it to your .env file.');
           }
-          
+
           // Load repositories
           loadRepositories();
         } else {
@@ -107,7 +129,7 @@ const AppContent: React.FC = () => {
       } catch (err) {
         console.error('[Bridge] Backend connection failed:', err);
         setBackendConnected(false);
-        setError('🔴 Backend not responding. Run: npm run server');
+        setError('Backend not responding. Run: npm run server');
       }
     };
     checkBackend();
@@ -130,12 +152,14 @@ const AppContent: React.FC = () => {
     setIsLoadingRepos(true);
     try {
       console.log('[Bridge] Loading repositories...');
-      const res = await fetch(`${API_URL}/repositories`);
+      const res = await fetch(`${API_URL}/api/repositories`, {
+        credentials: 'include'
+      });
       console.log('[Bridge] Load repositories status:', res.status);
-      
+
       if (res.ok) {
         const contentType = res.headers.get('content-type');
-        
+
         if (contentType && contentType.includes('application/json')) {
           const data = await res.json();
           setRepositories(data);
@@ -159,10 +183,12 @@ const AppContent: React.FC = () => {
   const pollStatus = async (scanId: number) => {
     console.log('[Bridge] Starting to poll scan:', scanId);
     setScanProgress(null);
-    
+
     const interval = setInterval(async () => {
         try {
-            const res = await fetch(`${API_URL}/scan/${scanId}`);
+            const res = await fetch(`${API_URL}/api/scan/${scanId}`, {
+              credentials: 'include'
+            });
             
             if (!res.ok) {
               console.error('[Bridge] Poll failed with status:', res.status);
@@ -223,9 +249,10 @@ const AppContent: React.FC = () => {
 
     try {
         console.log('[Bridge] Sending POST request to /api/scan');
-        const res = await fetch(`${API_URL}/scan`, {
+        const res = await fetch(`${API_URL}/api/scan`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ repoUrl: urlToScan, repositoryId: repoId })
         });
         
@@ -278,10 +305,11 @@ const AppContent: React.FC = () => {
 
     try {
       console.log('[Bridge] Adding repository:', normalizedUrl);
-      
-      const res = await fetch(`${API_URL}/repositories`, {
+
+      const res = await fetch(`${API_URL}/api/repositories`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ repoUrl: normalizedUrl })
       });
 
@@ -429,10 +457,10 @@ const AppContent: React.FC = () => {
           <div className="animate-in fade-in duration-500">
             <div className="mb-6">
               <h2 className="text-3xl font-sans font-black text-white mb-2 uppercase italic">
-                Connected Repositories
+                {user?.username}'s Dashboard
               </h2>
               <p className="text-slate-400 font-mono text-sm">
-                Monitor technical debt across your organization
+                Monitor technical debt across your repositories
               </p>
             </div>
 
@@ -564,11 +592,11 @@ const AppContent: React.FC = () => {
 
         {/* VIEW: ADD REPOSITORY */}
         {viewMode === 'add-repository' && !isScanning && (
-          <div className="h-[70vh] flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
-             
+          <div className="min-h-[70vh] flex flex-col items-center justify-start pt-8 animate-in fade-in zoom-in duration-500">
+
              <div className="w-full max-w-2xl relative">
                 {/* Back Button */}
-                <button 
+                <button
                   onClick={backToRepositories}
                   className="mb-6 flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
                 >
@@ -586,57 +614,107 @@ const AppContent: React.FC = () => {
                    {/* Background Grid */}
                    <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
 
-                   <h2 className="text-3xl font-sans font-black text-white mb-2 uppercase italic">
+                   <h2 className="text-3xl font-sans font-black text-white mb-2 uppercase italic relative">
                       Connect Repository
                    </h2>
-                   <p className="text-slate-400 mb-8 font-mono text-sm border-l-2 border-apex-500 pl-4">
-                      Enter a GitHub repository URL to start monitoring
+                   <p className="text-slate-400 mb-6 font-mono text-sm border-l-2 border-apex-500 pl-4 relative">
+                      Browse your GitHub repositories or enter a URL directly
                    </p>
 
-                   {/* Github Input Form */}
-                   <form onSubmit={(e) => { e.preventDefault(); addRepository(); }} className="mb-8">
-                      <div className="relative group">
-                        <div className={`absolute -inset-1 ${urlValidation.isValid ? 'bg-apex-500' : 'bg-red-500'} opacity-20 group-hover:opacity-40 blur transition duration-200`}></div>
-                        <div className="relative flex bg-black">
-                           <div className={`flex items-center justify-center w-12 bg-slate-900 border-y border-l ${urlValidation.isValid ? 'border-slate-700 text-slate-400' : 'border-red-700 text-red-400'}`}>
-                              <Terminal size={20} />
-                           </div>
-                           <input 
-                              type="text" 
-                              placeholder="github.com/owner/repo or owner/repo" 
-                              className={`w-full bg-black border text-white px-4 py-4 focus:outline-none font-mono transition-colors ${
-                                urlValidation.isValid 
-                                  ? 'border-slate-700 focus:border-apex-500' 
-                                  : 'border-red-700 focus:border-red-500'
-                              }`}
-                              value={repoUrl}
-                              onChange={(e) => handleUrlChange(e.target.value)}
-                           />
-                           <button 
-                              type="submit"
-                              disabled={!repoUrl || !urlValidation.isValid}
-                              className="px-8 bg-apex-500 hover:bg-apex-400 disabled:bg-slate-800 disabled:text-slate-600 text-black font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
-                           >
-                              Connect <ChevronRight size={16} />
-                           </button>
+                   {/* Mode Toggle */}
+                   <div className="flex gap-2 mb-6 relative">
+                     <button
+                       onClick={() => setAddRepoMode('browse')}
+                       className={`flex-1 py-2 px-4 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                         addRepoMode === 'browse'
+                           ? 'bg-apex-500 text-black'
+                           : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                       }`}
+                     >
+                       <Search size={16} />
+                       Browse Repos
+                     </button>
+                     <button
+                       onClick={() => setAddRepoMode('url')}
+                       className={`flex-1 py-2 px-4 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                         addRepoMode === 'url'
+                           ? 'bg-apex-500 text-black'
+                           : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                       }`}
+                     >
+                       <LinkIcon size={16} />
+                       Enter URL
+                     </button>
+                   </div>
+
+                   {/* GitHub Browser */}
+                   {addRepoMode === 'browse' && (
+                     <div className="relative mb-6">
+                       <GitHubBrowser
+                         onConnect={async (url) => {
+                           const res = await fetch(`${API_URL}/api/repositories`, {
+                             method: 'POST',
+                             headers: { 'Content-Type': 'application/json' },
+                             credentials: 'include',
+                             body: JSON.stringify({ repoUrl: url })
+                           });
+                           if (!res.ok) {
+                             const data = await res.json();
+                             throw new Error(data.error || 'Failed to connect');
+                           }
+                           await loadRepositories();
+                         }}
+                         isDemo={user?.isDemo}
+                       />
+                     </div>
+                   )}
+
+                   {/* URL Input Form */}
+                   {addRepoMode === 'url' && (
+                     <form onSubmit={(e) => { e.preventDefault(); addRepository(); }} className="mb-6 relative">
+                        <div className="relative group">
+                          <div className={`absolute -inset-1 ${urlValidation.isValid ? 'bg-apex-500' : 'bg-red-500'} opacity-20 group-hover:opacity-40 blur transition duration-200`}></div>
+                          <div className="relative flex bg-black">
+                             <div className={`flex items-center justify-center w-12 bg-slate-900 border-y border-l ${urlValidation.isValid ? 'border-slate-700 text-slate-400' : 'border-red-700 text-red-400'}`}>
+                                <Terminal size={20} />
+                             </div>
+                             <input
+                                type="text"
+                                placeholder="github.com/owner/repo or owner/repo"
+                                className={`w-full bg-black border text-white px-4 py-4 focus:outline-none font-mono transition-colors ${
+                                  urlValidation.isValid
+                                    ? 'border-slate-700 focus:border-apex-500'
+                                    : 'border-red-700 focus:border-red-500'
+                                }`}
+                                value={repoUrl}
+                                onChange={(e) => handleUrlChange(e.target.value)}
+                             />
+                             <button
+                                type="submit"
+                                disabled={!repoUrl || !urlValidation.isValid}
+                                className="px-8 bg-apex-500 hover:bg-apex-400 disabled:bg-slate-800 disabled:text-slate-600 text-black font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
+                             >
+                                Connect <ChevronRight size={16} />
+                             </button>
+                          </div>
                         </div>
-                      </div>
-                      {/* Validation feedback */}
-                      {repoUrl && !urlValidation.isValid && urlValidation.error && (
-                        <div className="mt-2 text-red-400 text-xs font-mono flex items-center gap-2">
-                          <AlertTriangle size={12} />
-                          {urlValidation.error}
-                        </div>
-                      )}
-                      {repoUrl && urlValidation.isValid && urlValidation.normalized && urlValidation.normalized !== repoUrl && (
-                        <div className="mt-2 text-slate-500 text-xs font-mono">
-                          Will connect: {urlValidation.normalized}
-                        </div>
-                      )}
-                   </form>
-                   
+                        {/* Validation feedback */}
+                        {repoUrl && !urlValidation.isValid && urlValidation.error && (
+                          <div className="mt-2 text-red-400 text-xs font-mono flex items-center gap-2">
+                            <AlertTriangle size={12} />
+                            {urlValidation.error}
+                          </div>
+                        )}
+                        {repoUrl && urlValidation.isValid && urlValidation.normalized && urlValidation.normalized !== repoUrl && (
+                          <div className="mt-2 text-slate-500 text-xs font-mono">
+                            Will connect: {urlValidation.normalized}
+                          </div>
+                        )}
+                     </form>
+                   )}
+
                    {error && (
-                       <div className="mb-6">
+                       <div className="mb-6 relative">
                          <InlineError 
                            message={error}
                            onDismiss={() => setError(null)}
@@ -764,12 +842,19 @@ const AppContent: React.FC = () => {
                     label="Packages"
                     badge={metrics.issues.outdatedDependencies.length + metrics.issues.unusedDependencies.length}
                  />
-                 <TabButton 
-                    active={activeTab === 'insights'} 
+                 <TabButton
+                    active={activeTab === 'insights'}
                     onClick={() => setActiveTab('insights')}
                     icon={<Brain size={16} />}
-                    label="AI Insights"
+                    label="Insights"
                     badge={metrics.aiAnalysis?.insights?.length || 0}
+                 />
+                 <TabButton
+                    active={activeTab === 'agents'}
+                    onClick={() => setActiveTab('agents')}
+                    icon={<Bot size={16} />}
+                    label="Agents"
+                    badge={0}
                  />
               </div>
 
@@ -777,6 +862,22 @@ const AppContent: React.FC = () => {
               {activeTab === 'overview' && <OverviewTab metrics={metrics} />}
               {activeTab === 'packages' && <PackagesTab metrics={metrics} />}
               {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
+              {activeTab === 'agents' && (
+                <div className="bg-bg-800 border border-slate-700 rounded-lg p-8 text-center">
+                  <Bot size={48} className="mx-auto mb-4 text-slate-600" />
+                  <h3 className="text-xl font-bold text-white mb-2">Agents Coming Soon</h3>
+                  <p className="text-slate-400 max-w-md mx-auto">
+                    Automated agents will help you update packages, remove unused dependencies,
+                    fix security vulnerabilities, and clean up code - all with one click.
+                  </p>
+                  <div className="mt-6 flex flex-wrap justify-center gap-3">
+                    <span className="px-3 py-1 bg-blue-900/30 text-blue-400 rounded-full text-sm">Package Updates</span>
+                    <span className="px-3 py-1 bg-green-900/30 text-green-400 rounded-full text-sm">Security Fixes</span>
+                    <span className="px-3 py-1 bg-purple-900/30 text-purple-400 rounded-full text-sm">Code Cleanup</span>
+                    <span className="px-3 py-1 bg-orange-900/30 text-orange-400 rounded-full text-sm">Dependency Audit</span>
+                  </div>
+                </div>
+              )}
 
               {/* Scan History */}
               {selectedRepo && (

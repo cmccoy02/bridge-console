@@ -1,16 +1,23 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { getDb } from './db.js';
 import { processScan } from './worker.js';
+import { generateJWT, setAuthCookie, clearAuthCookie, authMiddleware } from './auth.js';
+import { getUserRepos, getUserOrgs, getOrgRepos } from './github.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -42,10 +49,10 @@ app.get('/api/auth/github', (req, res) => {
     });
   }
   
-  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/callback';
-  const scope = 'read:user user:email';
-  
-  const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}`;
+  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:5173/auth/callback';
+  const scope = 'repo user:email read:org';
+
+  const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
   
   res.json({ authUrl });
 });
@@ -114,6 +121,10 @@ app.post('/api/auth/github/callback', async (req, res) => {
       user = { id: result.lastID, ...githubUser };
     }
 
+    // Generate JWT and set cookie
+    const token = generateJWT(user.id);
+    setAuthCookie(res, token);
+
     // Return user info (without access token for security)
     res.json({
       id: user.id,
@@ -132,10 +143,10 @@ app.post('/api/auth/github/callback', async (req, res) => {
 // Demo login (for local development without OAuth)
 app.post('/api/auth/demo', async (req, res) => {
   const db = await getDb();
-  
+
   // Create or get demo user
   let user = await db.get('SELECT * FROM users WHERE "githubId" = ?', ['demo-user']);
-  
+
   if (!user) {
     const result = await db.run(
       'INSERT INTO users ("githubId", username, email, "avatarUrl") VALUES (?, ?, ?, ?)',
@@ -143,6 +154,10 @@ app.post('/api/auth/demo', async (req, res) => {
     );
     user = { id: result.lastID };
   }
+
+  // Generate JWT and set cookie
+  const token = generateJWT(user.id);
+  setAuthCookie(res, token);
 
   res.json({
     id: user.id,
@@ -154,32 +169,109 @@ app.post('/api/auth/demo', async (req, res) => {
 });
 
 // Get current user
-app.get('/api/auth/me', async (req, res) => {
-  // In production, this would check a session/JWT
-  // For now, we'll use a simple approach
-  const userId = req.headers['x-user-id'];
-  
-  if (!userId) {
-    return res.status(401).json({ error: 'Not authenticated' });
-  }
-
-  const db = await getDb();
-  const user = await db.get('SELECT id, username, email, "avatarUrl" FROM users WHERE id = ?', [userId]);
-  
-  if (!user) {
-    return res.status(401).json({ error: 'User not found' });
-  }
-
-  res.json(user);
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  res.json({
+    id: req.user.id,
+    username: req.user.username,
+    email: req.user.email,
+    avatarUrl: req.user.avatarUrl,
+    isDemo: req.user.githubId === 'demo-user'
+  });
 });
 
 // Logout
 app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookie(res);
   res.json({ success: true });
 });
 
-// 1. Get All Repositories
-app.get('/api/repositories', async (req, res) => {
+// ===== GITHUB BROWSER ENDPOINTS =====
+
+// Get user's GitHub repositories
+app.get('/api/github/repos', authMiddleware, async (req, res) => {
+  try {
+    if (!req.user.accessToken) {
+      return res.status(400).json({ error: 'No GitHub access token. Please re-authenticate.' });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage) || 30;
+    const type = req.query.type || 'all';
+
+    const result = await getUserRepos(req.user.accessToken, page, perPage, type);
+
+    // Get user's connected repos to mark which are already connected
+    const db = await getDb();
+    const connectedRepos = await db.all(
+      'SELECT "repoUrl" FROM repositories WHERE "userId" = ? AND "isActive" = 1',
+      [req.user.id]
+    );
+    const connectedUrls = new Set(connectedRepos.map(r => r.repoUrl));
+
+    // Mark repos that are already connected
+    result.repos = result.repos.map(repo => ({
+      ...repo,
+      isConnected: connectedUrls.has(repo.htmlUrl)
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('[GitHub] Error fetching repos:', error);
+    res.status(500).json({ error: 'Failed to fetch GitHub repositories' });
+  }
+});
+
+// Get user's GitHub organizations
+app.get('/api/github/orgs', authMiddleware, async (req, res) => {
+  try {
+    if (!req.user.accessToken) {
+      return res.status(400).json({ error: 'No GitHub access token. Please re-authenticate.' });
+    }
+
+    const orgs = await getUserOrgs(req.user.accessToken);
+    res.json(orgs);
+  } catch (error) {
+    console.error('[GitHub] Error fetching orgs:', error);
+    res.status(500).json({ error: 'Failed to fetch GitHub organizations' });
+  }
+});
+
+// Get organization's repositories
+app.get('/api/github/orgs/:org/repos', authMiddleware, async (req, res) => {
+  try {
+    if (!req.user.accessToken) {
+      return res.status(400).json({ error: 'No GitHub access token. Please re-authenticate.' });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const perPage = parseInt(req.query.perPage) || 30;
+
+    const result = await getOrgRepos(req.user.accessToken, req.params.org, page, perPage);
+
+    // Mark connected repos
+    const db = await getDb();
+    const connectedRepos = await db.all(
+      'SELECT "repoUrl" FROM repositories WHERE "userId" = ? AND "isActive" = 1',
+      [req.user.id]
+    );
+    const connectedUrls = new Set(connectedRepos.map(r => r.repoUrl));
+
+    result.repos = result.repos.map(repo => ({
+      ...repo,
+      isConnected: connectedUrls.has(repo.htmlUrl)
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('[GitHub] Error fetching org repos:', error);
+    res.status(500).json({ error: 'Failed to fetch organization repositories' });
+  }
+});
+
+// ===== REPOSITORY ENDPOINTS =====
+
+// 1. Get All Repositories (for authenticated user)
+app.get('/api/repositories', authMiddleware, async (req, res) => {
   try {
     const db = await getDb();
     const repos = await db.all(`
@@ -197,9 +289,9 @@ app.get('/api/repositories', async (req, res) => {
         s."createdAt" as "lastScanDate"
       FROM repositories r
       LEFT JOIN scans s ON r."lastScanId" = s.id
-      WHERE r."isActive" = 1
+      WHERE r."isActive" = 1 AND r."userId" = ?
       ORDER BY r."updatedAt" DESC
-    `);
+    `, [req.user.id]);
 
     // Parse scan data (PostgreSQL returns JSONB as object, SQLite as string)
     const formatted = repos.map(repo => ({
@@ -217,12 +309,12 @@ app.get('/api/repositories', async (req, res) => {
 });
 
 // 2. Add/Connect Repository
-app.post('/api/repositories', async (req, res) => {
+app.post('/api/repositories', authMiddleware, async (req, res) => {
   try {
     console.log('[Bridge Server] POST /api/repositories body:', req.body);
-    
+
     const { repoUrl } = req.body;
-    
+
     if (!repoUrl) {
       console.error('[Bridge Server] Missing repoUrl in request');
       return res.status(400).json({ error: 'Repo URL required' });
@@ -236,31 +328,31 @@ app.post('/api/repositories', async (req, res) => {
 
     // Extract owner and name from URL
     const urlParts = repoUrl.replace('https://github.com/', '').replace('http://github.com/', '').replace('.git', '').split('/').filter(p => p);
-    
+
     if (urlParts.length < 2) {
       console.error('[Bridge Server] Could not parse owner/name from URL:', repoUrl);
       return res.status(400).json({ error: 'Invalid GitHub URL format. Expected: https://github.com/owner/repo' });
     }
-    
+
     const owner = urlParts[0];
     const name = urlParts[1];
 
     console.log('[Bridge Server] Parsed repo - Owner:', owner, 'Name:', name);
 
     const db = await getDb();
-    
-    // Check if repo already exists
-    const existing = await db.get('SELECT * FROM repositories WHERE "repoUrl" = ?', [repoUrl]);
-    
+
+    // Check if repo already exists for this user
+    const existing = await db.get('SELECT * FROM repositories WHERE "repoUrl" = ? AND "userId" = ?', [repoUrl, req.user.id]);
+
     if (existing) {
       console.warn('[Bridge Server] Repository already exists:', repoUrl);
       return res.status(400).json({ error: 'Repository already connected' });
     }
 
-    // Create repository entry
+    // Create repository entry with userId
     const result = await db.run(
-      'INSERT INTO repositories ("repoUrl", name, owner) VALUES (?, ?, ?)',
-      [repoUrl, name, owner]
+      'INSERT INTO repositories ("repoUrl", name, owner, "userId") VALUES (?, ?, ?, ?)',
+      [repoUrl, name, owner, req.user.id]
     );
 
     console.log('[Bridge Server] Added repository:', name, 'with ID:', result.lastID);
@@ -272,10 +364,11 @@ app.post('/api/repositories', async (req, res) => {
 });
 
 // 3. Delete/Disconnect Repository
-app.delete('/api/repositories/:id', async (req, res) => {
+app.delete('/api/repositories/:id', authMiddleware, async (req, res) => {
   try {
     const db = await getDb();
-    await db.run('UPDATE repositories SET "isActive" = 0 WHERE id = ?', [req.params.id]);
+    // Only allow deleting own repositories
+    await db.run('UPDATE repositories SET "isActive" = 0 WHERE id = ? AND "userId" = ?', [req.params.id, req.user.id]);
     res.json({ success: true });
   } catch (error) {
     console.error('[Bridge Server] Error removing repository:', error);
@@ -284,9 +377,16 @@ app.delete('/api/repositories/:id', async (req, res) => {
 });
 
 // 4. Get Scan History for Repository
-app.get('/api/repositories/:id/history', async (req, res) => {
+app.get('/api/repositories/:id/history', authMiddleware, async (req, res) => {
   try {
     const db = await getDb();
+
+    // Verify user owns this repository
+    const repo = await db.get('SELECT id FROM repositories WHERE id = ? AND "userId" = ?', [req.params.id, req.user.id]);
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
     const scans = await db.all(`
       SELECT id, status, "createdAt",
              data->'score'->>'total' as score
@@ -326,19 +426,19 @@ app.get('/api/scans/:id/export', async (req, res) => {
 });
 
 // 4. Start a Scan for a Repository
-app.post('/api/scan', async (req, res) => {
+app.post('/api/scan', authMiddleware, async (req, res) => {
   try {
     const { repoUrl, repositoryId } = req.body;
-    
+
     console.log('[Bridge Server] Received scan request:', repoUrl);
-    
+
     if (!repoUrl) {
       console.error('[Bridge Server] Missing repoUrl in request');
       return res.status(400).json({ error: 'Repo URL required' });
     }
 
     const db = await getDb();
-    
+
     // Get or create repository
     let repoId = repositoryId;
     if (!repoId) {
@@ -346,16 +446,22 @@ app.post('/api/scan', async (req, res) => {
       const owner = urlParts[0];
       const name = urlParts[1];
 
-      const existing = await db.get('SELECT id FROM repositories WHERE "repoUrl" = ?', [repoUrl]);
-      
+      const existing = await db.get('SELECT id FROM repositories WHERE "repoUrl" = ? AND "userId" = ?', [repoUrl, req.user.id]);
+
       if (existing) {
         repoId = existing.id;
       } else {
         const result = await db.run(
-          'INSERT INTO repositories ("repoUrl", name, owner) VALUES (?, ?, ?)',
-          [repoUrl, name, owner]
+          'INSERT INTO repositories ("repoUrl", name, owner, "userId") VALUES (?, ?, ?, ?)',
+          [repoUrl, name, owner, req.user.id]
         );
         repoId = result.lastID;
+      }
+    } else {
+      // Verify user owns the repository
+      const repo = await db.get('SELECT id FROM repositories WHERE id = ? AND "userId" = ?', [repositoryId, req.user.id]);
+      if (!repo) {
+        return res.status(404).json({ error: 'Repository not found' });
       }
     }
 
@@ -364,7 +470,7 @@ app.post('/api/scan', async (req, res) => {
       'INSERT INTO scans ("repositoryId", "repoUrl", status) VALUES (?, ?, ?)',
       [repoId, repoUrl, 'processing']
     );
-    
+
     const scanId = result.lastID;
     console.log('[Bridge Server] Created scan job:', scanId);
 
@@ -426,6 +532,220 @@ app.get('/api/history', async (req, res) => {
     const db = await getDb();
     const scans = await db.all('SELECT id, "repoUrl", status, "createdAt" FROM scans ORDER BY id DESC LIMIT 5');
     res.json(scans);
+});
+
+// ===== AGENT ENDPOINTS (Scaffolding for future features) =====
+
+// List user's agents
+app.get('/api/agents', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    const agents = await db.all(
+      'SELECT * FROM agents WHERE "userId" = ? ORDER BY "createdAt" DESC',
+      [req.user.id]
+    );
+    res.json(agents);
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching agents:', error);
+    res.status(500).json({ error: 'Failed to fetch agents' });
+  }
+});
+
+// Create new agent
+app.post('/api/agents', authMiddleware, async (req, res) => {
+  try {
+    const { name, type, config = {}, schedule = null } = req.body;
+
+    if (!name || !type) {
+      return res.status(400).json({ error: 'Name and type are required' });
+    }
+
+    const validTypes = ['package-update', 'unused-deps', 'security-audit', 'code-cleanup'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Invalid agent type' });
+    }
+
+    const db = await getDb();
+    const result = await db.run(
+      'INSERT INTO agents ("userId", name, type, config, schedule) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, name, type, JSON.stringify(config), schedule]
+    );
+
+    res.json({
+      id: result.lastID,
+      userId: req.user.id,
+      name,
+      type,
+      config,
+      schedule,
+      isEnabled: 1
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error creating agent:', error);
+    res.status(500).json({ error: 'Failed to create agent' });
+  }
+});
+
+// Get agent by ID
+app.get('/api/agents/:id', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    const agent = await db.get(
+      'SELECT * FROM agents WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Parse config if string
+    if (typeof agent.config === 'string') {
+      agent.config = JSON.parse(agent.config);
+    }
+
+    res.json(agent);
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching agent:', error);
+    res.status(500).json({ error: 'Failed to fetch agent' });
+  }
+});
+
+// Update agent
+app.patch('/api/agents/:id', authMiddleware, async (req, res) => {
+  try {
+    const { name, config, schedule, isEnabled } = req.body;
+    const db = await getDb();
+
+    // Verify ownership
+    const agent = await db.get(
+      'SELECT * FROM agents WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Build update query
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) {
+      updates.push('name = ?');
+      values.push(name);
+    }
+    if (config !== undefined) {
+      updates.push('config = ?');
+      values.push(JSON.stringify(config));
+    }
+    if (schedule !== undefined) {
+      updates.push('schedule = ?');
+      values.push(schedule);
+    }
+    if (isEnabled !== undefined) {
+      updates.push('"isEnabled" = ?');
+      values.push(isEnabled ? 1 : 0);
+    }
+
+    if (updates.length > 0) {
+      updates.push('"updatedAt" = CURRENT_TIMESTAMP');
+      values.push(req.params.id);
+      await db.run(`UPDATE agents SET ${updates.join(', ')} WHERE id = ?`, values);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Bridge Server] Error updating agent:', error);
+    res.status(500).json({ error: 'Failed to update agent' });
+  }
+});
+
+// Delete agent
+app.delete('/api/agents/:id', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    await db.run(
+      'DELETE FROM agents WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Bridge Server] Error deleting agent:', error);
+    res.status(500).json({ error: 'Failed to delete agent' });
+  }
+});
+
+// Get agent run history
+app.get('/api/agents/:id/runs', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Verify ownership
+    const agent = await db.get(
+      'SELECT * FROM agents WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const runs = await db.all(
+      'SELECT * FROM agent_runs WHERE "agentId" = ? ORDER BY "createdAt" DESC LIMIT 20',
+      [req.params.id]
+    );
+
+    res.json(runs);
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching agent runs:', error);
+    res.status(500).json({ error: 'Failed to fetch agent runs' });
+  }
+});
+
+// Trigger manual agent run (placeholder - actual execution not implemented)
+app.post('/api/agents/:id/run', authMiddleware, async (req, res) => {
+  try {
+    const { repositoryId } = req.body;
+    const db = await getDb();
+
+    // Verify agent ownership
+    const agent = await db.get(
+      'SELECT * FROM agents WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!agent) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    // Verify repository ownership
+    const repo = await db.get(
+      'SELECT * FROM repositories WHERE id = ? AND "userId" = ?',
+      [repositoryId, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    // Create a pending run (actual execution would be implemented separately)
+    const result = await db.run(
+      'INSERT INTO agent_runs ("agentId", "repositoryId", status) VALUES (?, ?, ?)',
+      [req.params.id, repositoryId, 'pending']
+    );
+
+    res.json({
+      id: result.lastID,
+      agentId: parseInt(req.params.id),
+      repositoryId,
+      status: 'pending',
+      message: 'Agent run queued. Execution engine coming soon.'
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error triggering agent run:', error);
+    res.status(500).json({ error: 'Failed to trigger agent run' });
+  }
 });
 
 // Catch-all for 404s - BEFORE error handler

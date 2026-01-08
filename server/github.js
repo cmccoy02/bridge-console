@@ -14,6 +14,117 @@ const client = axios.create({
   }
 });
 
+// Create a client with a user's access token
+function createUserClient(accessToken) {
+  return axios.create({
+    baseURL: API_BASE,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/vnd.github.v3+json'
+    }
+  });
+}
+
+// Fetch user's repositories
+export async function getUserRepos(accessToken, page = 1, perPage = 30, type = 'all') {
+  try {
+    const userClient = createUserClient(accessToken);
+    const { data, headers } = await userClient.get('/user/repos', {
+      params: {
+        page,
+        per_page: perPage,
+        type, // all, owner, public, private, member
+        sort: 'updated',
+        direction: 'desc'
+      }
+    });
+
+    // Check if there are more pages
+    const linkHeader = headers.link || '';
+    const hasMore = linkHeader.includes('rel="next"');
+
+    return {
+      repos: data.map(repo => ({
+        id: repo.id,
+        name: repo.name,
+        fullName: repo.full_name,
+        owner: repo.owner.login,
+        ownerAvatar: repo.owner.avatar_url,
+        description: repo.description,
+        htmlUrl: repo.html_url,
+        isPrivate: repo.private,
+        language: repo.language,
+        stars: repo.stargazers_count,
+        updatedAt: repo.updated_at,
+        defaultBranch: repo.default_branch
+      })),
+      hasMore,
+      page
+    };
+  } catch (error) {
+    console.error('[GitHub] Error fetching user repos:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Fetch user's organizations
+export async function getUserOrgs(accessToken) {
+  try {
+    const userClient = createUserClient(accessToken);
+    const { data } = await userClient.get('/user/orgs');
+
+    return data.map(org => ({
+      id: org.id,
+      login: org.login,
+      avatarUrl: org.avatar_url,
+      description: org.description
+    }));
+  } catch (error) {
+    console.error('[GitHub] Error fetching user orgs:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// Fetch organization's repositories
+export async function getOrgRepos(accessToken, orgName, page = 1, perPage = 30) {
+  try {
+    const userClient = createUserClient(accessToken);
+    const { data, headers } = await userClient.get(`/orgs/${orgName}/repos`, {
+      params: {
+        page,
+        per_page: perPage,
+        sort: 'updated',
+        direction: 'desc'
+      }
+    });
+
+    const linkHeader = headers.link || '';
+    const hasMore = linkHeader.includes('rel="next"');
+
+    return {
+      repos: data.map(repo => ({
+        id: repo.id,
+        name: repo.name,
+        fullName: repo.full_name,
+        owner: repo.owner.login,
+        ownerAvatar: repo.owner.avatar_url,
+        description: repo.description,
+        htmlUrl: repo.html_url,
+        isPrivate: repo.private,
+        language: repo.language,
+        stars: repo.stargazers_count,
+        updatedAt: repo.updated_at,
+        defaultBranch: repo.default_branch
+      })),
+      hasMore,
+      page
+    };
+  } catch (error) {
+    console.error('[GitHub] Error fetching org repos:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
 export async function getRepoMetadata(owner, repo) {
   try {
     // 1. Basic Info (Age, Size)

@@ -129,7 +129,38 @@ export async function getDb() {
         FOREIGN KEY (repositoryId) REFERENCES repositories(id)
       )
     `);
-    
+
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS agents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        config JSON DEFAULT '{}',
+        schedule TEXT,
+        isEnabled INTEGER DEFAULT 1,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS agent_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agentId INTEGER,
+        repositoryId INTEGER,
+        status TEXT DEFAULT 'pending',
+        startedAt DATETIME,
+        completedAt DATETIME,
+        result JSON,
+        logs TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (agentId) REFERENCES agents(id),
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id)
+      )
+    `);
+
     console.log('[DB] SQLite initialized');
     return sqliteDb;
   }
@@ -203,11 +234,44 @@ export async function getDb() {
     )
   `);
 
+  // Agents table for automated tasks
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS agents (
+      id SERIAL PRIMARY KEY,
+      "userId" INTEGER REFERENCES users(id),
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config JSONB DEFAULT '{}',
+      schedule TEXT,
+      "isEnabled" INTEGER DEFAULT 1,
+      "createdAt" TIMESTAMP DEFAULT NOW(),
+      "updatedAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Agent runs history
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id SERIAL PRIMARY KEY,
+      "agentId" INTEGER REFERENCES agents(id),
+      "repositoryId" INTEGER REFERENCES repositories(id),
+      status TEXT DEFAULT 'pending',
+      "startedAt" TIMESTAMP,
+      "completedAt" TIMESTAMP,
+      result JSONB,
+      logs TEXT,
+      "createdAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
   // Create indexes for performance
   try {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_scans_repository ON scans("repositoryId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_scans_status ON scans(status)`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_repos_active ON repositories("isActive")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_user ON agents("userId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs("agentId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_runs_repo ON agent_runs("repositoryId")`);
   } catch (e) {
     // Indexes might already exist, that's fine
   }

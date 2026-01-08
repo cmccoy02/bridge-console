@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
 interface User {
   id: number;
   username: string;
@@ -14,6 +16,7 @@ interface AuthContextType {
   login: () => void;
   loginDemo: () => Promise<void>;
   logout: () => void;
+  handleOAuthCallback: (code: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,22 +35,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Check for existing session on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('bridge_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem('bridge_user');
-      }
-    }
-    setIsLoading(false);
+    checkSession();
   }, []);
+
+  const checkSession = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+      }
+    } catch (error) {
+      console.error('Session check error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const login = async () => {
     try {
-      const res = await fetch('/api/auth/github');
+      const res = await fetch(`${API_URL}/api/auth/github`, {
+        credentials: 'include'
+      });
       const data = await res.json();
-      
+
       if (data.demoMode) {
         // OAuth not configured, use demo mode
         await loginDemo();
@@ -64,28 +78,56 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const loginDemo = async () => {
     try {
-      const res = await fetch('/api/auth/demo', { method: 'POST' });
+      const res = await fetch(`${API_URL}/api/auth/demo`, {
+        method: 'POST',
+        credentials: 'include'
+      });
       const userData = await res.json();
-      
+
       setUser(userData);
-      localStorage.setItem('bridge_user', JSON.stringify(userData));
     } catch (error) {
       console.error('Demo login error:', error);
     }
   };
 
-  const logout = () => {
+  const handleOAuthCallback = async (code: string) => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/github/callback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ code })
+      });
+
+      if (res.ok) {
+        const userData = await res.json();
+        setUser(userData);
+      } else {
+        throw new Error('OAuth callback failed');
+      }
+    } catch (error) {
+      console.error('OAuth callback error:', error);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await fetch(`${API_URL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
     setUser(null);
-    localStorage.removeItem('bridge_user');
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, loginDemo, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, loginDemo, logout, handleOAuthCallback }}>
       {children}
     </AuthContext.Provider>
   );
 };
-
-
-
