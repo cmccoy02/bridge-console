@@ -13,7 +13,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: [ 'http://localhost:3000'],
   credentials: true
 }));
 app.use(express.json());
@@ -49,8 +49,9 @@ app.get('/api/auth/github', (req, res) => {
     });
   }
   
-  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:5173/auth/callback';
-  const scope = 'repo user:email read:org';
+  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+  // Scopes: repo (access repos), read:user (read user data), read:org (read org membership), user:email (read email)
+  const scope = 'repo read:user read:org user:email';
 
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
   
@@ -228,11 +229,16 @@ app.get('/api/github/orgs', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'No GitHub access token. Please re-authenticate.' });
     }
 
+    console.log('[GitHub] Fetching organizations for user:', req.user.username);
     const orgs = await getUserOrgs(req.user.accessToken);
+    console.log('[GitHub] Found', orgs.length, 'organizations');
     res.json(orgs);
   } catch (error) {
-    console.error('[GitHub] Error fetching orgs:', error);
-    res.status(500).json({ error: 'Failed to fetch GitHub organizations' });
+    console.error('[GitHub] Error fetching orgs:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch GitHub organizations',
+      details: error.response?.data?.message || error.message 
+    });
   }
 });
 
@@ -246,7 +252,9 @@ app.get('/api/github/orgs/:org/repos', authMiddleware, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const perPage = parseInt(req.query.perPage) || 30;
 
+    console.log('[GitHub] Fetching repos for org:', req.params.org, 'page:', page);
     const result = await getOrgRepos(req.user.accessToken, req.params.org, page, perPage);
+    console.log('[GitHub] Found', result.repos.length, 'repos for org:', req.params.org);
 
     // Mark connected repos
     const db = await getDb();
@@ -263,8 +271,11 @@ app.get('/api/github/orgs/:org/repos', authMiddleware, async (req, res) => {
 
     res.json(result);
   } catch (error) {
-    console.error('[GitHub] Error fetching org repos:', error);
-    res.status(500).json({ error: 'Failed to fetch organization repositories' });
+    console.error('[GitHub] Error fetching org repos:', error.response?.data || error.message);
+    res.status(500).json({ 
+      error: 'Failed to fetch organization repositories',
+      details: error.response?.data?.message || error.message 
+    });
   }
 });
 

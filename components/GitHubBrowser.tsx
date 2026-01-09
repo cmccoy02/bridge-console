@@ -136,13 +136,21 @@ const GitHubBrowser: React.FC<GitHubBrowserProps> = ({ onConnect, isDemo }) => {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Failed to load organizations');
+        
+        // Provide helpful error message for organization access
+        if (res.status === 403 || res.status === 401) {
+          throw new Error('Unable to access organizations. If your organization has OAuth App restrictions enabled, ask an admin to approve Bridge. Otherwise, try re-authenticating.');
+        }
+        
+        throw new Error(data.error || data.details || 'Failed to load organizations');
       }
 
       const data = await res.json();
       setOrgs(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load organizations');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load organizations';
+      setError(errorMessage);
+      console.error('[GitHubBrowser] Error loading orgs:', err);
     } finally {
       setIsLoading(false);
     }
@@ -159,7 +167,13 @@ const GitHubBrowser: React.FC<GitHubBrowserProps> = ({ onConnect, isDemo }) => {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Failed to load organization repositories');
+        
+        // Provide helpful error message for organization repo access
+        if (res.status === 403 || res.status === 401) {
+          throw new Error(`Unable to access ${orgName} repositories. The organization may have OAuth App restrictions. Ask an organization admin to approve Bridge in the organization settings.`);
+        }
+        
+        throw new Error(data.error || data.details || 'Failed to load organization repositories');
       }
 
       const data = await res.json();
@@ -167,7 +181,9 @@ const GitHubBrowser: React.FC<GitHubBrowserProps> = ({ onConnect, isDemo }) => {
       setHasMore(data.hasMore);
       setPage(loadPage);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load organization repositories');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load organization repositories';
+      setError(errorMessage);
+      console.error('[GitHubBrowser] Error loading org repos:', err);
     } finally {
       setIsLoading(false);
     }
