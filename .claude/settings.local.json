@@ -9,7 +9,10 @@
       "Bash(nslookup:*)",
       "Bash(node:*)",
       "Bash(git init:*)",
-      "Bash(npm install)"
+      "Bash(npm install)",
+      "Bash(npx tsc:*)",
+      "Bash(timeout 10 node:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

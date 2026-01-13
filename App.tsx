@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BridgeMetrics } from './types';
+import React, { useState, useEffect, useRef } from 'react';
+import { BridgeMetrics, UpdateJobResult } from './types';
 import ScoreGauge from './components/ScoreGauge';
 import DependencyGraph from './components/DependencyGraph';
 import TriageList from './components/TriageList';
@@ -86,6 +86,12 @@ const AppContent: React.FC = () => {
   const [filterNeedsAttention, setFilterNeedsAttention] = useState(false);
   const [addRepoMode, setAddRepoMode] = useState<AddRepoMode>('browse');
 
+  // Update job state
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [currentUpdateJobId, setCurrentUpdateJobId] = useState<number | null>(null);
+  const [updateResult, setUpdateResult] = useState<UpdateJobResult | null>(null);
+  const updatePollRef = useRef<NodeJS.Timeout | null>(null);
+
   // Handle OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -134,6 +140,15 @@ const AppContent: React.FC = () => {
     };
     checkBackend();
   }, [user, authLoading]);
+
+  // Cleanup update poll on unmount
+  useEffect(() => {
+    return () => {
+      if (updatePollRef.current) {
+        clearInterval(updatePollRef.current);
+      }
+    };
+  }, []);
 
   // Show login screen if not authenticated
   if (authLoading) {
@@ -279,6 +294,82 @@ const AppContent: React.FC = () => {
         setError(`SCAN_INIT_FAILED: ${err instanceof Error ? err.message : 'Unknown error'}`);
         setIsScanning(false);
     }
+  };
+
+  // Trigger minor/patch update for selected repository
+  const triggerUpdate = async () => {
+    if (!selectedRepo) return;
+
+    setIsUpdating(true);
+    setUpdateResult(null);
+    setError(null);
+
+    try {
+      console.log('[Bridge] Triggering update for:', selectedRepo.name);
+      const res = await fetch(`${API_URL}/api/repositories/${selectedRepo.id}/update`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to trigger update');
+      }
+
+      const data = await res.json();
+      console.log('[Bridge] Update job created:', data.jobId);
+      setCurrentUpdateJobId(data.jobId);
+      pollUpdateStatus(data.jobId);
+    } catch (err) {
+      console.error('[Bridge] Update trigger failed:', err);
+      setError(err instanceof Error ? err.message : 'Update failed');
+      setIsUpdating(false);
+    }
+  };
+
+  // Poll update job status
+  const pollUpdateStatus = (jobId: number) => {
+    // Clear any existing poll
+    if (updatePollRef.current) {
+      clearInterval(updatePollRef.current);
+    }
+
+    updatePollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/update-jobs/${jobId}`, {
+          credentials: 'include'
+        });
+
+        if (!res.ok) {
+          clearInterval(updatePollRef.current!);
+          updatePollRef.current = null;
+          setError('Failed to get update status');
+          setIsUpdating(false);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.status === 'completed') {
+          clearInterval(updatePollRef.current!);
+          updatePollRef.current = null;
+          setIsUpdating(false);
+          setUpdateResult(data.result);
+          console.log('[Bridge] Update completed:', data.result);
+        } else if (data.status === 'failed') {
+          clearInterval(updatePollRef.current!);
+          updatePollRef.current = null;
+          setIsUpdating(false);
+          setError(data.result?.error || 'Update failed');
+        }
+      } catch (e) {
+        console.error('[Bridge] Update poll error:', e);
+        clearInterval(updatePollRef.current!);
+        updatePollRef.current = null;
+        setError('Lost connection to server');
+        setIsUpdating(false);
+      }
+    }, 1500);
   };
 
   // Validate URL on change
@@ -860,7 +951,73 @@ const AppContent: React.FC = () => {
 
               {/* Tab Content */}
               {activeTab === 'overview' && <OverviewTab metrics={metrics} />}
-              {activeTab === 'packages' && <PackagesTab metrics={metrics} />}
+              {activeTab === 'packages' && (
+                <>
+                  {/* Update Success Banner */}
+                  {updateResult?.prUrl && (
+                    <div className="mb-6 p-4 bg-green-950/30 border border-green-900/50 rounded-lg">
+                      <div className="flex items-center gap-2 text-green-400 mb-2">
+                        <RefreshCw size={20} />
+                        <span className="font-bold">Pull Request Created!</span>
+                      </div>
+                      <a
+                        href={updateResult.prUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-400 hover:text-green-300 underline flex items-center gap-1"
+                      >
+                        <LinkIcon size={14} />
+                        {updateResult.prUrl}
+                      </a>
+                      {updateResult.changedPackages && updateResult.changedPackages.length > 0 && (
+                        <div className="mt-3 text-sm text-slate-400">
+                          <span className="font-medium text-white">{updateResult.changedPackages.length}</span> packages updated:
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {updateResult.changedPackages.slice(0, 5).map((pkg) => (
+                              <span key={pkg.name} className="px-2 py-0.5 bg-slate-800 rounded text-xs font-mono">
+                                {pkg.name}
+                              </span>
+                            ))}
+                            {updateResult.changedPackages.length > 5 && (
+                              <span className="px-2 py-0.5 bg-slate-800 rounded text-xs">
+                                +{updateResult.changedPackages.length - 5} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setUpdateResult(null)}
+                        className="mt-3 text-xs text-slate-500 hover:text-slate-400"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  {/* No Updates Message */}
+                  {updateResult && !updateResult.prUrl && updateResult.message && (
+                    <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                      <div className="flex items-center gap-2 text-slate-400">
+                        <RefreshCw size={20} />
+                        <span>{updateResult.message}</span>
+                      </div>
+                      <button
+                        onClick={() => setUpdateResult(null)}
+                        className="mt-3 text-xs text-slate-500 hover:text-slate-400"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  <PackagesTab
+                    metrics={metrics}
+                    onTriggerUpdate={triggerUpdate}
+                    isUpdating={isUpdating}
+                  />
+                </>
+              )}
               {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
               {activeTab === 'agents' && (
                 <div className="bg-bg-800 border border-slate-700 rounded-lg p-8 text-center">
@@ -1007,25 +1164,63 @@ const OverviewTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => (
    </div>
 );
 
-const PackagesTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => (
-   <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-12 lg:col-span-6 flex flex-col gap-6">
-         <DashboardCard title="Outdated Packages" className="h-[500px]">
-            <TriageList
-               outdated={metrics.issues.outdatedDependencies}
-               enhanced={metrics.issues.enhancedDependencies}
-               analysis={metrics.issues.dependencyAnalysis}
-            />
-         </DashboardCard>
+interface PackagesTabProps {
+  metrics: BridgeMetrics;
+  onTriggerUpdate?: () => void;
+  isUpdating?: boolean;
+}
+
+const PackagesTab: React.FC<PackagesTabProps> = ({ metrics, onTriggerUpdate, isUpdating }) => (
+   <div className="space-y-6">
+      {/* Update Button Header */}
+      <div className="flex justify-between items-center">
+         <h3 className="text-slate-400 text-sm uppercase tracking-wider">
+            Dependency Management
+         </h3>
+         {onTriggerUpdate && (
+            <button
+               onClick={onTriggerUpdate}
+               disabled={isUpdating}
+               className={`px-4 py-2 text-sm font-bold uppercase tracking-wider flex items-center gap-2 transition-colors rounded ${
+                  isUpdating
+                     ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                     : 'bg-green-600 hover:bg-green-500 text-white'
+               }`}
+            >
+               {isUpdating ? (
+                  <>
+                     <Loader2 className="animate-spin" size={16} />
+                     Updating...
+                  </>
+               ) : (
+                  <>
+                     <RefreshCw size={16} />
+                     Run Minor/Patch Updates
+                  </>
+               )}
+            </button>
+         )}
       </div>
 
-      <div className="col-span-12 lg:col-span-6 flex flex-col gap-6">
-         <DashboardCard title="Dependency Issues" className="h-[500px]">
-            <DependencyIssues 
-               unused={metrics.issues.unusedDependencies} 
-               missing={metrics.issues.missingDependencies} 
-            />
-         </DashboardCard>
+      <div className="grid grid-cols-12 gap-6">
+         <div className="col-span-12 lg:col-span-6 flex flex-col gap-6">
+            <DashboardCard title="Outdated Packages" className="h-[500px]">
+               <TriageList
+                  outdated={metrics.issues.outdatedDependencies}
+                  enhanced={metrics.issues.enhancedDependencies}
+                  analysis={metrics.issues.dependencyAnalysis}
+               />
+            </DashboardCard>
+         </div>
+
+         <div className="col-span-12 lg:col-span-6 flex flex-col gap-6">
+            <DashboardCard title="Dependency Issues" className="h-[500px]">
+               <DependencyIssues
+                  unused={metrics.issues.unusedDependencies}
+                  missing={metrics.issues.missingDependencies}
+               />
+            </DashboardCard>
+         </div>
       </div>
    </div>
 );

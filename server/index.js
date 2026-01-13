@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import { getDb } from './db.js';
 import { processScan } from './worker.js';
+import { processUpdate } from './update-worker.js';
 import { generateJWT, setAuthCookie, clearAuthCookie, authMiddleware } from './auth.js';
 import { getUserRepos, getUserOrgs, getOrgRepos } from './github.js';
 
@@ -411,6 +412,132 @@ app.get('/api/repositories/:id/history', authMiddleware, async (req, res) => {
   } catch (error) {
     console.error('[Bridge Server] Error fetching history:', error);
     res.status(500).json({ error: 'Failed to fetch scan history' });
+  }
+});
+
+// ===== UPDATE JOB ENDPOINTS =====
+
+// Trigger automated minor/patch updates for a repository
+app.post('/api/repositories/:id/update', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Verify user owns this repository
+    const repo = await db.get(
+      'SELECT * FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    // Check user has GitHub access token
+    if (!req.user.accessToken) {
+      return res.status(400).json({
+        error: 'GitHub write access required. Please re-authenticate with GitHub.'
+      });
+    }
+
+    // Create update job entry
+    const result = await db.run(
+      'INSERT INTO update_jobs ("repositoryId", "userId", status) VALUES (?, ?, ?)',
+      [req.params.id, req.user.id, 'pending']
+    );
+
+    const jobId = result.lastID;
+    console.log(`[Bridge Server] Created update job ${jobId} for repository ${repo.name}`);
+
+    // Trigger worker (fire and forget)
+    processUpdate(jobId, repo, req.user.accessToken, db).catch(err => {
+      console.error('[Bridge Server] Update worker error:', err);
+    });
+
+    res.json({
+      jobId,
+      repositoryId: parseInt(req.params.id),
+      status: 'pending'
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error triggering update:', error);
+    res.status(500).json({ error: 'Failed to trigger update job' });
+  }
+});
+
+// Get update job status
+app.get('/api/update-jobs/:id', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    const job = await db.get(
+      `SELECT uj.*, r."repoUrl", r.name as "repoName"
+       FROM update_jobs uj
+       JOIN repositories r ON uj."repositoryId" = r.id
+       WHERE uj.id = ? AND uj."userId" = ?`,
+      [req.params.id, req.user.id]
+    );
+
+    if (!job) {
+      return res.status(404).json({ error: 'Update job not found' });
+    }
+
+    // Parse JSON fields (PostgreSQL returns objects, SQLite returns strings)
+    const progress = job.progress
+      ? (typeof job.progress === 'string' ? JSON.parse(job.progress) : job.progress)
+      : null;
+    const result = job.result
+      ? (typeof job.result === 'string' ? JSON.parse(job.result) : job.result)
+      : null;
+
+    res.json({
+      id: job.id,
+      repositoryId: job.repositoryId,
+      repoName: job.repoName,
+      status: job.status,
+      progress,
+      result,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      createdAt: job.createdAt
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching update job:', error);
+    res.status(500).json({ error: 'Failed to fetch update job status' });
+  }
+});
+
+// Get update history for a repository
+app.get('/api/repositories/:id/update-history', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Verify ownership
+    const repo = await db.get(
+      'SELECT id FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    const jobs = await db.all(
+      `SELECT id, status, result, "createdAt", "completedAt"
+       FROM update_jobs
+       WHERE "repositoryId" = ?
+       ORDER BY "createdAt" DESC
+       LIMIT 10`,
+      [req.params.id]
+    );
+
+    res.json(jobs.map(job => ({
+      ...job,
+      result: job.result
+        ? (typeof job.result === 'string' ? JSON.parse(job.result) : job.result)
+        : null
+    })));
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching update history:', error);
+    res.status(500).json({ error: 'Failed to fetch update history' });
   }
 });
 

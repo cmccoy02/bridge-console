@@ -161,6 +161,24 @@ export async function getDb() {
       )
     `);
 
+    // Update jobs table for automated dependency updates
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS update_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repositoryId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        status TEXT DEFAULT 'pending',
+        progress JSON,
+        result JSON,
+        logs TEXT,
+        startedAt DATETIME,
+        completedAt DATETIME,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id),
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
     console.log('[DB] SQLite initialized');
     return sqliteDb;
   }
@@ -264,6 +282,22 @@ export async function getDb() {
     )
   `);
 
+  // Update jobs table for automated dependency updates
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS update_jobs (
+      id SERIAL PRIMARY KEY,
+      "repositoryId" INTEGER NOT NULL REFERENCES repositories(id),
+      "userId" INTEGER NOT NULL REFERENCES users(id),
+      status TEXT DEFAULT 'pending',
+      progress JSONB,
+      result JSONB,
+      logs TEXT,
+      "startedAt" TIMESTAMP,
+      "completedAt" TIMESTAMP,
+      "createdAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
   // Create indexes for performance
   try {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_scans_repository ON scans("repositoryId")`);
@@ -272,6 +306,8 @@ export async function getDb() {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_agents_user ON agents("userId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs("agentId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_runs_repo ON agent_runs("repositoryId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_update_jobs_repo ON update_jobs("repositoryId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_update_jobs_user ON update_jobs("userId")`);
   } catch (e) {
     // Indexes might already exist, that's fine
   }

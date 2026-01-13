@@ -302,3 +302,45 @@ export interface AgentRun {
   logs: string | null;
   createdAt: string;
 }
+
+// ===== UPDATE JOB TYPES =====
+
+export interface UpdateJobProgress {
+  phase: string;
+  step: number;
+  totalSteps: number;
+  percent: number;
+  detail?: string;
+  timestamp?: string;
+}
+
+export interface PackageChange {
+  name: string;
+  from: string;
+  to: string;
+  isDev: boolean;
+}
+
+export interface UpdateJobResult {
+  prUrl?: string;
+  prNumber?: number;
+  changedPackages: PackageChange[];
+  baseBranch?: string;
+  headBranch?: string;
+  message?: string;
+  error?: string;
+}
+
+export type UpdateJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+
+export interface UpdateJob {
+  id: number;
+  repositoryId: number;
+  userId: number;
+  status: UpdateJobStatus;
+  progress: UpdateJobProgress | null;
+  result: UpdateJobResult | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
