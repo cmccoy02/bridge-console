@@ -10,7 +10,7 @@ const DependencyGraph: React.FC<DependencyGraphProps> = ({ cycles }) => {
   if (cycles.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-green-500 font-mono text-xs uppercase">
-        ✓ System Stable // No Circular Dependencies
+        [OK] System Stable // No Circular Dependencies
       </div>
     );
   }

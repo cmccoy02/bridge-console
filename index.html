@@ -32,6 +32,7 @@
             fontFamily: {
               sans: ['Tektur', 'sans-serif'], // Robotic headers
               mono: ['JetBrains Mono', 'monospace'], // Data text
+              ocr: ['OCR-A', 'monospace'], // Title font
             },
             backgroundImage: {
               'grid-pattern': "linear-gradient(to right, #1f2937 1px, transparent 1px), linear-gradient(to bottom, #1f2937 1px, transparent 1px)",
@@ -41,6 +42,14 @@
       }
     </script>
     <style>
+      /* OCR-A Font for titles */
+      @font-face {
+        font-family: 'OCR-A';
+        src: url('/fonts/OCR-a___.ttf') format('truetype');
+        font-weight: normal;
+        font-style: normal;
+      }
+
       body {
         background-color: #050505;
         color: #e2e8f0;

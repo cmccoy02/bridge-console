@@ -126,7 +126,7 @@ const ScanProgress: React.FC<ScanProgressProps> = ({ progress, repoName }) => {
       {/* Tip */}
       <div className="bg-slate-900/50 border-t border-slate-700 px-4 py-2">
         <div className="text-[10px] text-slate-500 text-center">
-          💡 Large repositories may take a few minutes
+          Note: Large repositories may take a few minutes
         </div>
       </div>
     </div>

@@ -179,6 +179,34 @@ export async function getDb() {
       )
     `);
 
+    // Automation settings per repository
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS automation_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repositoryId INTEGER UNIQUE NOT NULL,
+        scanEnabled INTEGER DEFAULT 0,
+        scanFrequency TEXT DEFAULT 'manual',
+        scanDayOfWeek INTEGER,
+        scanDayOfMonth INTEGER,
+        scanTime TEXT,
+        patchEnabled INTEGER DEFAULT 0,
+        patchFrequency TEXT DEFAULT 'manual',
+        patchDayOfWeek INTEGER,
+        patchDayOfMonth INTEGER,
+        patchTime TEXT,
+        patchAutoMerge INTEGER DEFAULT 0,
+        reportEnabled INTEGER DEFAULT 0,
+        reportFrequency TEXT DEFAULT 'manual',
+        reportDayOfWeek INTEGER,
+        reportDayOfMonth INTEGER,
+        reportTime TEXT,
+        reportRecipients JSON,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id)
+      )
+    `);
+
     console.log('[DB] SQLite initialized');
     return sqliteDb;
   }
@@ -295,6 +323,33 @@ export async function getDb() {
       "startedAt" TIMESTAMP,
       "completedAt" TIMESTAMP,
       "createdAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Automation settings per repository
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS automation_settings (
+      id SERIAL PRIMARY KEY,
+      "repositoryId" INTEGER UNIQUE NOT NULL REFERENCES repositories(id),
+      "scanEnabled" INTEGER DEFAULT 0,
+      "scanFrequency" TEXT DEFAULT 'manual',
+      "scanDayOfWeek" INTEGER,
+      "scanDayOfMonth" INTEGER,
+      "scanTime" TEXT,
+      "patchEnabled" INTEGER DEFAULT 0,
+      "patchFrequency" TEXT DEFAULT 'manual',
+      "patchDayOfWeek" INTEGER,
+      "patchDayOfMonth" INTEGER,
+      "patchTime" TEXT,
+      "patchAutoMerge" INTEGER DEFAULT 0,
+      "reportEnabled" INTEGER DEFAULT 0,
+      "reportFrequency" TEXT DEFAULT 'manual',
+      "reportDayOfWeek" INTEGER,
+      "reportDayOfMonth" INTEGER,
+      "reportTime" TEXT,
+      "reportRecipients" JSONB,
+      "createdAt" TIMESTAMP DEFAULT NOW(),
+      "updatedAt" TIMESTAMP DEFAULT NOW()
     )
   `);
 

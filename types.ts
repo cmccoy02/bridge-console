@@ -344,3 +344,39 @@ export interface UpdateJob {
   completedAt: string | null;
   createdAt: string;
 }
+
+// ===== AUTOMATION SETTINGS =====
+
+export type AutomationFrequency = 'manual' | 'daily' | 'weekly' | 'monthly';
+
+export interface AutomationSettings {
+  id?: number;
+  repositoryId: number;
+
+  // Scan automation
+  scanEnabled: boolean;
+  scanFrequency: AutomationFrequency;
+  scanDayOfWeek?: number; // 0-6 for weekly
+  scanDayOfMonth?: number; // 1-31 for monthly
+  scanTime?: string; // HH:MM format
+
+  // Patch update automation
+  patchEnabled: boolean;
+  patchFrequency: AutomationFrequency;
+  patchDayOfWeek?: number;
+  patchDayOfMonth?: number;
+  patchTime?: string;
+  patchAutoMerge?: boolean;
+
+  // Report automation
+  reportEnabled: boolean;
+  reportFrequency: AutomationFrequency;
+  reportDayOfWeek?: number;
+  reportDayOfMonth?: number;
+  reportTime?: string;
+  reportRecipients?: string[];
+
+  // Timestamps
+  createdAt?: string;
+  updatedAt?: string;
+}

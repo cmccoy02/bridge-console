@@ -32,28 +32,28 @@ const IMPACT_STYLES = {
     border: 'border-red-500/50',
     text: 'text-red-400',
     badge: 'bg-red-500/30 text-red-300',
-    icon: '🚨'
+    icon: '[!]'
   },
   high: {
     bg: 'bg-orange-500/20',
     border: 'border-orange-500/50',
     text: 'text-orange-400',
     badge: 'bg-orange-500/30 text-orange-300',
-    icon: '⚠️'
+    icon: '[H]'
   },
   medium: {
     bg: 'bg-yellow-500/20',
     border: 'border-yellow-500/50',
     text: 'text-yellow-400',
     badge: 'bg-yellow-500/30 text-yellow-300',
-    icon: '📋'
+    icon: '[M]'
   },
   low: {
     bg: 'bg-blue-500/20',
     border: 'border-blue-500/50',
     text: 'text-blue-400',
     badge: 'bg-blue-500/30 text-blue-300',
-    icon: '💡'
+    icon: '[L]'
   }
 };
 
@@ -66,12 +66,12 @@ const EFFORT_LABELS: Record<string, { label: string; hours: string; color: strin
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
-  'Dependencies': '📦',
-  'Architecture': '🏗️',
-  'Code Quality': '✨',
-  'Testing': '🧪',
-  'Documentation': '📚',
-  'Security': '🔒'
+  'Dependencies': '[DEP]',
+  'Architecture': '[ARC]',
+  'Code Quality': '[QTY]',
+  'Testing': '[TST]',
+  'Documentation': '[DOC]',
+  'Security': '[SEC]'
 };
 
 export default function ActionableTasks({ tasks, executiveSummary, stats }: ActionableTasksProps) {
@@ -248,7 +248,7 @@ export default function ActionableTasks({ tasks, executiveSummary, stats }: Acti
                               }}
                               className="px-3 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded text-sm transition-colors"
                             >
-                              {copiedCommand === task.id ? '✓ Copied' : 'Copy'}
+                              {copiedCommand === task.id ? 'Copied!' : 'Copy'}
                             </button>
                           )}
                         </div>

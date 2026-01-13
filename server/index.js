@@ -886,6 +886,199 @@ app.post('/api/agents/:id/run', authMiddleware, async (req, res) => {
   }
 });
 
+// ===== AUTOMATION SETTINGS ENDPOINTS =====
+
+// Get automation settings for a repository
+app.get('/api/repositories/:id/automation-settings', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Verify ownership
+    const repo = await db.get(
+      'SELECT id FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    const settings = await db.get(
+      'SELECT * FROM automation_settings WHERE "repositoryId" = ?',
+      [req.params.id]
+    );
+
+    if (!settings) {
+      // Return default settings if none exist
+      return res.json({
+        repositoryId: parseInt(req.params.id),
+        scanEnabled: false,
+        scanFrequency: 'manual',
+        patchEnabled: false,
+        patchFrequency: 'manual',
+        patchAutoMerge: false,
+        reportEnabled: false,
+        reportFrequency: 'manual',
+        reportRecipients: []
+      });
+    }
+
+    // Parse JSON fields
+    const reportRecipients = settings.reportRecipients
+      ? (typeof settings.reportRecipients === 'string' ? JSON.parse(settings.reportRecipients) : settings.reportRecipients)
+      : [];
+
+    res.json({
+      id: settings.id,
+      repositoryId: settings.repositoryId,
+      scanEnabled: !!settings.scanEnabled,
+      scanFrequency: settings.scanFrequency || 'manual',
+      scanDayOfWeek: settings.scanDayOfWeek,
+      scanDayOfMonth: settings.scanDayOfMonth,
+      scanTime: settings.scanTime,
+      patchEnabled: !!settings.patchEnabled,
+      patchFrequency: settings.patchFrequency || 'manual',
+      patchDayOfWeek: settings.patchDayOfWeek,
+      patchDayOfMonth: settings.patchDayOfMonth,
+      patchTime: settings.patchTime,
+      patchAutoMerge: !!settings.patchAutoMerge,
+      reportEnabled: !!settings.reportEnabled,
+      reportFrequency: settings.reportFrequency || 'manual',
+      reportDayOfWeek: settings.reportDayOfWeek,
+      reportDayOfMonth: settings.reportDayOfMonth,
+      reportTime: settings.reportTime,
+      reportRecipients
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching automation settings:', error);
+    res.status(500).json({ error: 'Failed to fetch automation settings' });
+  }
+});
+
+// Save automation settings for a repository
+app.put('/api/repositories/:id/automation-settings', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Verify ownership
+    const repo = await db.get(
+      'SELECT id FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    const {
+      scanEnabled = false,
+      scanFrequency = 'manual',
+      scanDayOfWeek,
+      scanDayOfMonth,
+      scanTime,
+      patchEnabled = false,
+      patchFrequency = 'manual',
+      patchDayOfWeek,
+      patchDayOfMonth,
+      patchTime,
+      patchAutoMerge = false,
+      reportEnabled = false,
+      reportFrequency = 'manual',
+      reportDayOfWeek,
+      reportDayOfMonth,
+      reportTime,
+      reportRecipients = []
+    } = req.body;
+
+    // Check if settings exist
+    const existing = await db.get(
+      'SELECT id FROM automation_settings WHERE "repositoryId" = ?',
+      [req.params.id]
+    );
+
+    if (existing) {
+      // Update existing
+      await db.run(
+        `UPDATE automation_settings SET
+          "scanEnabled" = ?,
+          "scanFrequency" = ?,
+          "scanDayOfWeek" = ?,
+          "scanDayOfMonth" = ?,
+          "scanTime" = ?,
+          "patchEnabled" = ?,
+          "patchFrequency" = ?,
+          "patchDayOfWeek" = ?,
+          "patchDayOfMonth" = ?,
+          "patchTime" = ?,
+          "patchAutoMerge" = ?,
+          "reportEnabled" = ?,
+          "reportFrequency" = ?,
+          "reportDayOfWeek" = ?,
+          "reportDayOfMonth" = ?,
+          "reportTime" = ?,
+          "reportRecipients" = ?,
+          "updatedAt" = CURRENT_TIMESTAMP
+        WHERE "repositoryId" = ?`,
+        [
+          scanEnabled ? 1 : 0,
+          scanFrequency,
+          scanDayOfWeek,
+          scanDayOfMonth,
+          scanTime,
+          patchEnabled ? 1 : 0,
+          patchFrequency,
+          patchDayOfWeek,
+          patchDayOfMonth,
+          patchTime,
+          patchAutoMerge ? 1 : 0,
+          reportEnabled ? 1 : 0,
+          reportFrequency,
+          reportDayOfWeek,
+          reportDayOfMonth,
+          reportTime,
+          JSON.stringify(reportRecipients),
+          req.params.id
+        ]
+      );
+    } else {
+      // Insert new
+      await db.run(
+        `INSERT INTO automation_settings (
+          "repositoryId",
+          "scanEnabled", "scanFrequency", "scanDayOfWeek", "scanDayOfMonth", "scanTime",
+          "patchEnabled", "patchFrequency", "patchDayOfWeek", "patchDayOfMonth", "patchTime", "patchAutoMerge",
+          "reportEnabled", "reportFrequency", "reportDayOfWeek", "reportDayOfMonth", "reportTime", "reportRecipients"
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          req.params.id,
+          scanEnabled ? 1 : 0,
+          scanFrequency,
+          scanDayOfWeek,
+          scanDayOfMonth,
+          scanTime,
+          patchEnabled ? 1 : 0,
+          patchFrequency,
+          patchDayOfWeek,
+          patchDayOfMonth,
+          patchTime,
+          patchAutoMerge ? 1 : 0,
+          reportEnabled ? 1 : 0,
+          reportFrequency,
+          reportDayOfWeek,
+          reportDayOfMonth,
+          reportTime,
+          JSON.stringify(reportRecipients)
+        ]
+      );
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Bridge Server] Error saving automation settings:', error);
+    res.status(500).json({ error: 'Failed to save automation settings' });
+  }
+});
+
 // Catch-all for 404s - BEFORE error handler
 app.use('/api/*', (req, res) => {
   console.error('[Bridge Server] 404 - Route not found:', req.method, req.originalUrl);
@@ -912,8 +1105,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`\n🌉 Bridge Server running on http://localhost:${PORT}`);
-  console.log(`   GitHub Token: ${process.env.GITHUB_TOKEN ? '✓ Loaded' : '✗ Missing'}`);
-  console.log(`   Gemini API Key: ${process.env.GEMINI_API_KEY ? '✓ Loaded' : '✗ Missing'}`);
+  console.log(`\n[Bridge] Server running on http://localhost:${PORT}`);
+  console.log(`   GitHub Token: ${process.env.GITHUB_TOKEN ? '[OK] Loaded' : '[X] Missing'}`);
+  console.log(`   Gemini API Key: ${process.env.GEMINI_API_KEY ? '[OK] Loaded' : '[X] Missing'}`);
   console.log(`   Ready to accept requests\n`);
 });

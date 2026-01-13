@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { BridgeMetrics, UpdateJobResult } from './types';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BridgeMetrics, UpdateJobResult, AutomationSettings, AutomationFrequency } from './types';
 import ScoreGauge from './components/ScoreGauge';
 import DependencyGraph from './components/DependencyGraph';
 import TriageList from './components/TriageList';
@@ -36,13 +36,20 @@ import {
   SlidersHorizontal,
   ArrowUpDown,
   Bot,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Save,
+  Clock,
+  Calendar,
+  FileText,
+  ToggleLeft,
+  ToggleRight,
+  Check
 } from 'lucide-react';
 import GitHubBrowser from './components/GitHubBrowser';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabType = 'overview' | 'packages' | 'insights' | 'agents';
+type TabType = 'overview' | 'packages' | 'insights' | 'automations';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
 type AddRepoMode = 'url' | 'browse';
 
@@ -500,7 +507,7 @@ const AppContent: React.FC = () => {
               B
             </div>
             <div>
-              <h1 className="font-sans font-bold text-xl tracking-widest text-white leading-none">
+              <h1 className="font-ocr font-bold text-xl tracking-widest text-white leading-none">
                 BRIDGE <span className="text-apex-500">//</span> CONSOLE
               </h1>
               <div className="flex items-center gap-2 text-[10px] text-slate-500 tracking-[0.2em] mt-1">
@@ -547,7 +554,7 @@ const AppContent: React.FC = () => {
         {viewMode === 'repositories' && !isScanning && (
           <div className="animate-in fade-in duration-500">
             <div className="mb-6">
-              <h2 className="text-3xl font-sans font-black text-white mb-2 uppercase italic">
+              <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase">
                 {user?.username}'s Dashboard
               </h2>
               <p className="text-slate-400 font-mono text-sm">
@@ -705,7 +712,7 @@ const AppContent: React.FC = () => {
                    {/* Background Grid */}
                    <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
 
-                   <h2 className="text-3xl font-sans font-black text-white mb-2 uppercase italic relative">
+                   <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase relative">
                       Connect Repository
                    </h2>
                    <p className="text-slate-400 mb-6 font-mono text-sm border-l-2 border-apex-500 pl-4 relative">
@@ -842,7 +849,7 @@ const AppContent: React.FC = () => {
                    {/* Background Grid */}
                    <div className="absolute inset-0 opacity-10 bg-[linear-gradient(rgba(255,255,255,0.1)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
 
-                   <h2 className="text-3xl font-sans font-black text-white mb-2 uppercase italic relative z-10">
+                   <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase relative z-10">
                       {selectedRepo?.name}
                    </h2>
                    <p className="text-slate-400 mb-8 font-mono text-sm relative z-10">
@@ -887,7 +894,7 @@ const AppContent: React.FC = () => {
                       <ArrowLeft size={20} />
                     </button>
                     <div>
-                       <h2 className="text-2xl text-white font-sans font-bold uppercase">
+                       <h2 className="text-2xl text-white font-ocr font-bold uppercase">
                           {metrics.meta.projectName}
                        </h2>
                        <div className="flex gap-4 text-xs font-mono text-slate-500 mt-1">
@@ -941,10 +948,10 @@ const AppContent: React.FC = () => {
                     badge={metrics.aiAnalysis?.insights?.length || 0}
                  />
                  <TabButton
-                    active={activeTab === 'agents'}
-                    onClick={() => setActiveTab('agents')}
+                    active={activeTab === 'automations'}
+                    onClick={() => setActiveTab('automations')}
                     icon={<Bot size={16} />}
-                    label="Agents"
+                    label="Automations"
                     badge={0}
                  />
               </div>
@@ -1019,21 +1026,8 @@ const AppContent: React.FC = () => {
                 </>
               )}
               {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
-              {activeTab === 'agents' && (
-                <div className="bg-bg-800 border border-slate-700 rounded-lg p-8 text-center">
-                  <Bot size={48} className="mx-auto mb-4 text-slate-600" />
-                  <h3 className="text-xl font-bold text-white mb-2">Agents Coming Soon</h3>
-                  <p className="text-slate-400 max-w-md mx-auto">
-                    Automated agents will help you update packages, remove unused dependencies,
-                    fix security vulnerabilities, and clean up code - all with one click.
-                  </p>
-                  <div className="mt-6 flex flex-wrap justify-center gap-3">
-                    <span className="px-3 py-1 bg-blue-900/30 text-blue-400 rounded-full text-sm">Package Updates</span>
-                    <span className="px-3 py-1 bg-green-900/30 text-green-400 rounded-full text-sm">Security Fixes</span>
-                    <span className="px-3 py-1 bg-purple-900/30 text-purple-400 rounded-full text-sm">Code Cleanup</span>
-                    <span className="px-3 py-1 bg-orange-900/30 text-orange-400 rounded-full text-sm">Dependency Audit</span>
-                  </div>
-                </div>
+              {activeTab === 'automations' && selectedRepo && (
+                <AutomationsTab repositoryId={selectedRepo.id} />
               )}
 
               {/* Scan History */}
@@ -1236,11 +1230,11 @@ const InsightsTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => {
 
    // Category icons for the breakdown
    const categoryIcons: Record<string, string> = {
-      dependencies: '📦',
-      architecture: '🏗️',
-      codeQuality: '✨',
-      testing: '🧪',
-      documentation: '📚'
+      dependencies: '[DEP]',
+      architecture: '[ARC]',
+      codeQuality: '[QTY]',
+      testing: '[TST]',
+      documentation: '[DOC]'
    };
 
    const categoryLabels: Record<string, string> = {
@@ -1322,6 +1316,389 @@ const InsightsTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => {
          </DashboardCard>
       </div>
    );
+};
+
+// Automations Tab Component
+const AutomationsTab: React.FC<{ repositoryId: number }> = ({ repositoryId }) => {
+  const [settings, setSettings] = useState<AutomationSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        setIsLoading(true);
+        const res = await fetch(`${API_URL}/api/repositories/${repositoryId}/automation-settings`, {
+          credentials: 'include'
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setSettings(data);
+        } else {
+          setError('Failed to load automation settings');
+        }
+      } catch (err) {
+        setError('Failed to connect to server');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSettings();
+  }, [repositoryId]);
+
+  // Save settings
+  const saveSettings = async () => {
+    if (!settings) return;
+
+    try {
+      setIsSaving(true);
+      setError(null);
+      setSaveSuccess(false);
+
+      const res = await fetch(`${API_URL}/api/repositories/${repositoryId}/automation-settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings)
+      });
+
+      if (res.ok) {
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
+      } else {
+        const data = await res.json();
+        setError(data.error || 'Failed to save settings');
+      }
+    } catch (err) {
+      setError('Failed to connect to server');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateSetting = <K extends keyof AutomationSettings>(key: K, value: AutomationSettings[K]) => {
+    if (settings) {
+      setSettings({ ...settings, [key]: value });
+    }
+  };
+
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  if (isLoading) {
+    return (
+      <div className="bg-bg-800 border border-slate-700 rounded-lg p-8 flex items-center justify-center">
+        <Loader2 className="animate-spin text-apex-500" size={32} />
+      </div>
+    );
+  }
+
+  if (!settings) {
+    return (
+      <div className="bg-bg-800 border border-slate-700 rounded-lg p-8 text-center">
+        <AlertTriangle className="mx-auto mb-4 text-red-500" size={32} />
+        <p className="text-slate-400">{error || 'Failed to load settings'}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header with Save Button */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-lg font-ocr font-bold text-white uppercase">Automation Settings</h3>
+          <p className="text-sm text-slate-400">Configure automated workflows for this repository</p>
+        </div>
+        <button
+          onClick={saveSettings}
+          disabled={isSaving}
+          className={`px-4 py-2 rounded flex items-center gap-2 font-bold uppercase text-sm transition-colors ${
+            saveSuccess
+              ? 'bg-green-600 text-white'
+              : 'bg-apex-500 hover:bg-apex-400 text-black'
+          } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          {isSaving ? (
+            <Loader2 className="animate-spin" size={16} />
+          ) : saveSuccess ? (
+            <Check size={16} />
+          ) : (
+            <Save size={16} />
+          )}
+          {saveSuccess ? 'Saved' : 'Save Settings'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-950/30 border border-red-900/50 rounded-lg text-red-400 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Scheduled Scans */}
+      <AutomationCard
+        title="Scheduled Scans"
+        description="Automatically run health scans on a schedule"
+        icon={<Activity size={24} />}
+        color="blue"
+        enabled={settings.scanEnabled}
+        onToggle={(v) => updateSetting('scanEnabled', v)}
+      >
+        <FrequencySelector
+          frequency={settings.scanFrequency}
+          dayOfWeek={settings.scanDayOfWeek}
+          dayOfMonth={settings.scanDayOfMonth}
+          time={settings.scanTime}
+          onFrequencyChange={(v) => updateSetting('scanFrequency', v)}
+          onDayOfWeekChange={(v) => updateSetting('scanDayOfWeek', v)}
+          onDayOfMonthChange={(v) => updateSetting('scanDayOfMonth', v)}
+          onTimeChange={(v) => updateSetting('scanTime', v)}
+          disabled={!settings.scanEnabled}
+        />
+      </AutomationCard>
+
+      {/* Patch Updates */}
+      <AutomationCard
+        title="Automated Patch Updates"
+        description="Automatically update minor and patch versions"
+        icon={<Package size={24} />}
+        color="green"
+        enabled={settings.patchEnabled}
+        onToggle={(v) => updateSetting('patchEnabled', v)}
+      >
+        <FrequencySelector
+          frequency={settings.patchFrequency}
+          dayOfWeek={settings.patchDayOfWeek}
+          dayOfMonth={settings.patchDayOfMonth}
+          time={settings.patchTime}
+          onFrequencyChange={(v) => updateSetting('patchFrequency', v)}
+          onDayOfWeekChange={(v) => updateSetting('patchDayOfWeek', v)}
+          onDayOfMonthChange={(v) => updateSetting('patchDayOfMonth', v)}
+          onTimeChange={(v) => updateSetting('patchTime', v)}
+          disabled={!settings.patchEnabled}
+        />
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <label className={`flex items-center gap-3 cursor-pointer ${!settings.patchEnabled ? 'opacity-50' : ''}`}>
+            <input
+              type="checkbox"
+              checked={settings.patchAutoMerge}
+              onChange={(e) => updateSetting('patchAutoMerge', e.target.checked)}
+              disabled={!settings.patchEnabled}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-apex-500 focus:ring-apex-500"
+            />
+            <div>
+              <span className="text-sm text-white font-medium">Auto-merge PRs</span>
+              <p className="text-xs text-slate-500">Automatically merge if all checks pass</p>
+            </div>
+          </label>
+        </div>
+      </AutomationCard>
+
+      {/* Weekly Reports */}
+      <AutomationCard
+        title="Weekly Reports"
+        description="Receive periodic health summaries via email"
+        icon={<FileText size={24} />}
+        color="purple"
+        enabled={settings.reportEnabled}
+        onToggle={(v) => updateSetting('reportEnabled', v)}
+      >
+        <FrequencySelector
+          frequency={settings.reportFrequency}
+          dayOfWeek={settings.reportDayOfWeek}
+          dayOfMonth={settings.reportDayOfMonth}
+          time={settings.reportTime}
+          onFrequencyChange={(v) => updateSetting('reportFrequency', v)}
+          onDayOfWeekChange={(v) => updateSetting('reportDayOfWeek', v)}
+          onDayOfMonthChange={(v) => updateSetting('reportDayOfMonth', v)}
+          onTimeChange={(v) => updateSetting('reportTime', v)}
+          disabled={!settings.reportEnabled}
+          showDayOfMonth={settings.reportFrequency === 'monthly'}
+        />
+        <div className="mt-4 pt-4 border-t border-slate-700">
+          <p className="text-xs text-slate-500 mb-2">
+            Reports will be sent to your registered email address.
+          </p>
+        </div>
+      </AutomationCard>
+
+      {/* Info Banner */}
+      <div className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+        <div className="flex items-start gap-3">
+          <Clock size={20} className="text-slate-400 mt-0.5" />
+          <div>
+            <p className="text-sm text-slate-300">
+              Automations run in the background. Times are based on your local timezone.
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Note: The scheduler service is not yet active. Settings are saved for when the feature launches.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Automation Card Component
+const AutomationCard: React.FC<{
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  color: 'blue' | 'green' | 'purple' | 'orange';
+  enabled: boolean;
+  onToggle: (enabled: boolean) => void;
+  children: React.ReactNode;
+}> = ({ title, description, icon, color, enabled, onToggle, children }) => {
+  const colorClasses = {
+    blue: { bg: 'bg-blue-900/20', border: 'border-blue-900/50', icon: 'text-blue-400' },
+    green: { bg: 'bg-green-900/20', border: 'border-green-900/50', icon: 'text-green-400' },
+    purple: { bg: 'bg-purple-900/20', border: 'border-purple-900/50', icon: 'text-purple-400' },
+    orange: { bg: 'bg-orange-900/20', border: 'border-orange-900/50', icon: 'text-orange-400' }
+  };
+
+  const colors = colorClasses[color];
+
+  return (
+    <div className={`rounded-lg border ${enabled ? colors.border : 'border-slate-700'} ${enabled ? colors.bg : 'bg-bg-800'} overflow-hidden transition-colors`}>
+      <div className="p-4 flex items-center justify-between border-b border-slate-700/50">
+        <div className="flex items-center gap-4">
+          <div className={`p-2 rounded-lg ${enabled ? colors.bg : 'bg-slate-800'}`}>
+            <span className={enabled ? colors.icon : 'text-slate-500'}>{icon}</span>
+          </div>
+          <div>
+            <h4 className="font-ocr font-bold text-white text-sm uppercase">{title}</h4>
+            <p className="text-xs text-slate-400">{description}</p>
+          </div>
+        </div>
+        <button
+          onClick={() => onToggle(!enabled)}
+          className="text-slate-400 hover:text-white transition-colors"
+        >
+          {enabled ? (
+            <ToggleRight size={32} className="text-apex-500" />
+          ) : (
+            <ToggleLeft size={32} />
+          )}
+        </button>
+      </div>
+      <div className={`p-4 ${!enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+// Frequency Selector Component
+const FrequencySelector: React.FC<{
+  frequency: AutomationFrequency;
+  dayOfWeek?: number;
+  dayOfMonth?: number;
+  time?: string;
+  onFrequencyChange: (freq: AutomationFrequency) => void;
+  onDayOfWeekChange: (day: number) => void;
+  onDayOfMonthChange: (day: number) => void;
+  onTimeChange: (time: string) => void;
+  disabled?: boolean;
+  showDayOfMonth?: boolean;
+}> = ({
+  frequency,
+  dayOfWeek = 1,
+  dayOfMonth = 1,
+  time = '09:00',
+  onFrequencyChange,
+  onDayOfWeekChange,
+  onDayOfMonthChange,
+  onTimeChange,
+  disabled = false,
+  showDayOfMonth = false
+}) => {
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+  return (
+    <div className="space-y-4">
+      {/* Frequency Selection */}
+      <div className="flex gap-2">
+        {(['manual', 'daily', 'weekly', 'monthly'] as AutomationFrequency[]).map((freq) => (
+          <button
+            key={freq}
+            onClick={() => onFrequencyChange(freq)}
+            disabled={disabled}
+            className={`px-3 py-1.5 rounded text-xs font-bold uppercase transition-colors ${
+              frequency === freq
+                ? 'bg-apex-500 text-black'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+            }`}
+          >
+            {freq}
+          </button>
+        ))}
+      </div>
+
+      {/* Additional Options */}
+      {frequency !== 'manual' && (
+        <div className="flex flex-wrap gap-4">
+          {/* Day of Week (for weekly) */}
+          {frequency === 'weekly' && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Day of Week</label>
+              <select
+                value={dayOfWeek}
+                onChange={(e) => onDayOfWeekChange(parseInt(e.target.value))}
+                disabled={disabled}
+                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-apex-500"
+              >
+                {dayNames.map((name, idx) => (
+                  <option key={idx} value={idx}>{name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Day of Month (for monthly) */}
+          {frequency === 'monthly' && (
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Day of Month</label>
+              <select
+                value={dayOfMonth}
+                onChange={(e) => onDayOfMonthChange(parseInt(e.target.value))}
+                disabled={disabled}
+                className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-apex-500"
+              >
+                {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                  <option key={day} value={day}>{day}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Time */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">Time</label>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => onTimeChange(e.target.value)}
+              disabled={disabled}
+              className="bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:outline-none focus:border-apex-500"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Manual Mode Info */}
+      {frequency === 'manual' && (
+        <p className="text-xs text-slate-500">
+          Run this automation manually from the dashboard when needed.
+        </p>
+      )}
+    </div>
+  );
 };
 
 // Main App wrapper with Auth and Error Boundary
