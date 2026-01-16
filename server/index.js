@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { getDb } from './db.js';
 import { processScan } from './worker.js';
 import { processUpdate } from './update-worker.js';
+import { processCleanup } from './cleanup-worker.js';
 import { generateJWT, setAuthCookie, clearAuthCookie, authMiddleware } from './auth.js';
 import { getUserRepos, getUserOrgs, getOrgRepos } from './github.js';
 
@@ -538,6 +539,102 @@ app.get('/api/repositories/:id/update-history', authMiddleware, async (req, res)
   } catch (error) {
     console.error('[Bridge Server] Error fetching update history:', error);
     res.status(500).json({ error: 'Failed to fetch update history' });
+  }
+});
+
+// Trigger cleanup job to remove unused dependencies
+app.post('/api/repositories/:id/cleanup', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { packages } = req.body;
+
+    if (!packages || !Array.isArray(packages) || packages.length === 0) {
+      return res.status(400).json({ error: 'packages array is required' });
+    }
+
+    // Get repository
+    const repo = await db.get(
+      'SELECT * FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    // Check for user access token (required for creating PR)
+    if (!req.user.accessToken) {
+      return res.status(400).json({
+        error: 'GitHub access token required. Please log in with GitHub (not demo mode) to create PRs.'
+      });
+    }
+
+    // Create cleanup job
+    const result = await db.run(
+      `INSERT INTO cleanup_jobs ("repositoryId", "userId", "packagesToRemove", status)
+       VALUES (?, ?, ?, 'pending')`,
+      [req.params.id, req.user.id, JSON.stringify(packages)]
+    );
+
+    const jobId = result.lastID;
+
+    // Start async cleanup process
+    processCleanup(jobId, repo, packages, req.user.accessToken, db).catch(err => {
+      console.error('[Bridge Server] Cleanup job error:', err);
+    });
+
+    res.json({
+      jobId,
+      message: 'Cleanup job started',
+      packages
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error starting cleanup job:', error);
+    res.status(500).json({ error: 'Failed to start cleanup job' });
+  }
+});
+
+// Get cleanup job status
+app.get('/api/cleanup-jobs/:id', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    const job = await db.get(
+      `SELECT cj.*, r."repoUrl", r.name as "repoName"
+       FROM cleanup_jobs cj
+       JOIN repositories r ON cj."repositoryId" = r.id
+       WHERE cj.id = ? AND cj."userId" = ?`,
+      [req.params.id, req.user.id]
+    );
+
+    if (!job) {
+      return res.status(404).json({ error: 'Cleanup job not found' });
+    }
+
+    const progress = job.progress
+      ? (typeof job.progress === 'string' ? JSON.parse(job.progress) : job.progress)
+      : null;
+    const result = job.result
+      ? (typeof job.result === 'string' ? JSON.parse(job.result) : job.result)
+      : null;
+    const packagesToRemove = job.packagesToRemove
+      ? (typeof job.packagesToRemove === 'string' ? JSON.parse(job.packagesToRemove) : job.packagesToRemove)
+      : [];
+
+    res.json({
+      id: job.id,
+      repositoryId: job.repositoryId,
+      repoName: job.repoName,
+      packagesToRemove,
+      status: job.status,
+      progress,
+      result,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+      createdAt: job.createdAt
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error fetching cleanup job:', error);
+    res.status(500).json({ error: 'Failed to fetch cleanup job status' });
   }
 });
 

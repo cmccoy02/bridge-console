@@ -8,37 +8,37 @@
 
 Bridge helps engineering teams understand, quantify, and fix technical debt across repositories. Get health scores, prioritized dependency updates, and automated pull requests - all through a simple dashboard.
 
-🚀 **[Install Bridge GitHub App](https://github.com/apps/bridge-console-dev)** | 📖 [View Documentation](tasks.md) | 💬 [Report Issues](https://github.com/cmccoy02/bridge-console/issues)
+ **[Install Bridge GitHub App](https://github.com/apps/bridge-console-dev)** 
 
 ---
 
-## ✨ What Bridge Does
+##  What Bridge Does
 
-- 🔍 **Analyzes** your repositories for technical debt (circular dependencies, outdated packages, unused imports)
-- 📊 **Scores** repository health across 4 dimensions (Coupling, Freshness, Cleanliness, Hygiene)
-- 🎯 **Prioritizes** which dependencies to update based on security, stability, and impact
-- 🤖 **Automates** safe dependency updates by creating PRs directly to your GitHub repos
-- 📈 **Tracks** progress over time with scan history and health trends
+-  **Analyzes** your repositories for technical debt (circular dependencies, outdated packages, unused imports)
+-  **Scores** repository health across 4 dimensions (Coupling, Freshness, Cleanliness, Hygiene)
+-  **Prioritizes** which dependencies to update based on security, stability, and impact
+-  **Automates** safe dependency updates by creating PRs directly to your GitHub repos
+-  **Tracks** progress over time with scan history and health trends
 
 **No more manual npm outdated checks. No more forgotten security patches. Just one-click updates.**
 
 ## Features
 
-### 🎯 4-Dimensional Health Scoring
+###  4-Dimensional Health Scoring
 
 - **Coupling** - Circular dependency detection via Madge
 - **Freshness** - Outdated package tracking via npm-check-updates
 - **Cleanliness** - Unused/missing dependency detection via Depcheck
 - **Hygiene** - Code quality and structure analysis
 
-### 🤖 Automated Dependency Updates
+###  Automated Dependency Updates
 
 - One-click minor/patch updates
 - Intelligent upgrade path suggestions
 - Automatic PR creation to your repository
 - Detailed changelogs and update logs
 
-### 📊 Multi-Repository Dashboard
+### Multi-Repository Dashboard
 
 - Monitor all your repositories in one place
 - Real-time health scores and trend tracking

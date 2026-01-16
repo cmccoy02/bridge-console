@@ -101,6 +101,10 @@ const AppContent: React.FC = () => {
   const [updateResult, setUpdateResult] = useState<UpdateJobResult | null>(null);
   const updatePollRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Cleanup job state (for removing unused dependencies)
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ prUrl?: string; message?: string; error?: string } | null>(null);
+
   // Handle OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -237,6 +241,28 @@ const AppContent: React.FC = () => {
       console.error('[Bridge] Failed to load repositories:', err);
     } finally {
       setIsLoadingRepos(false);
+    }
+  };
+
+  // Disconnect/remove a repository
+  const disconnectRepository = async (repoId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/api/repositories/${repoId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (res.ok) {
+        // Remove from local state
+        setRepositories(prev => prev.filter(r => r.id !== repoId));
+        console.log('[Bridge] Repository disconnected:', repoId);
+      } else {
+        console.error('[Bridge] Failed to disconnect repository:', res.status);
+        setError('Failed to disconnect repository');
+      }
+    } catch (err) {
+      console.error('[Bridge] Error disconnecting repository:', err);
+      setError('Error disconnecting repository');
     }
   };
 
@@ -414,6 +440,74 @@ const AppContent: React.FC = () => {
         updatePollRef.current = null;
         setError('Lost connection to server');
         setIsUpdating(false);
+      }
+    }, 1500);
+  };
+
+  // Trigger cleanup job to remove unused dependencies
+  const triggerCleanup = async (packages: string[]) => {
+    if (!selectedRepo || packages.length === 0) return;
+
+    setIsCleaningUp(true);
+    setCleanupResult(null);
+    setError(null);
+
+    try {
+      console.log('[Bridge] Triggering cleanup for:', selectedRepo.name, 'packages:', packages);
+      const res = await fetch(`${API_URL}/api/repositories/${selectedRepo.id}/cleanup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ packages })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to trigger cleanup');
+      }
+
+      const data = await res.json();
+      console.log('[Bridge] Cleanup job created:', data.jobId);
+      pollCleanupStatus(data.jobId);
+    } catch (err) {
+      console.error('[Bridge] Cleanup trigger failed:', err);
+      setError(err instanceof Error ? err.message : 'Cleanup failed');
+      setIsCleaningUp(false);
+    }
+  };
+
+  // Poll cleanup job status
+  const pollCleanupStatus = (jobId: number) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/cleanup-jobs/${jobId}`, {
+          credentials: 'include'
+        });
+
+        if (!res.ok) {
+          clearInterval(interval);
+          setError('Failed to get cleanup status');
+          setIsCleaningUp(false);
+          return;
+        }
+
+        const data = await res.json();
+
+        if (data.status === 'completed') {
+          clearInterval(interval);
+          setIsCleaningUp(false);
+          setCleanupResult(data.result);
+          console.log('[Bridge] Cleanup completed:', data.result);
+        } else if (data.status === 'failed') {
+          clearInterval(interval);
+          setIsCleaningUp(false);
+          setError(data.result?.error || 'Cleanup failed');
+        }
+      } catch (e) {
+        console.error('[Bridge] Cleanup poll error:', e);
+        clearInterval(interval);
+        setError('Lost connection to server');
+        setIsCleaningUp(false);
       }
     }, 1500);
   };
@@ -708,10 +802,11 @@ const AppContent: React.FC = () => {
                       }
                     })
                     .map(repo => (
-                      <RepositoryCard 
-                        key={repo.id} 
-                        repo={repo} 
+                      <RepositoryCard
+                        key={repo.id}
+                        repo={repo}
                         onClick={() => selectRepository(repo)}
+                        onDisconnect={disconnectRepository}
                       />
                     ))
                   }
@@ -1076,6 +1171,10 @@ const AppContent: React.FC = () => {
                     metrics={metrics}
                     onTriggerUpdate={triggerUpdate}
                     isUpdating={isUpdating}
+                    onRemovePackages={triggerCleanup}
+                    isCleaningUp={isCleaningUp}
+                    cleanupResult={cleanupResult}
+                    onDismissCleanupResult={() => setCleanupResult(null)}
                   />
                 </>
               )}
@@ -1216,9 +1315,21 @@ interface PackagesTabProps {
   metrics: BridgeMetrics;
   onTriggerUpdate?: () => void;
   isUpdating?: boolean;
+  onRemovePackages?: (packages: string[]) => Promise<void>;
+  isCleaningUp?: boolean;
+  cleanupResult?: { prUrl?: string; message?: string; error?: string } | null;
+  onDismissCleanupResult?: () => void;
 }
 
-const PackagesTab: React.FC<PackagesTabProps> = ({ metrics, onTriggerUpdate, isUpdating }) => (
+const PackagesTab: React.FC<PackagesTabProps> = ({
+  metrics,
+  onTriggerUpdate,
+  isUpdating,
+  onRemovePackages,
+  isCleaningUp,
+  cleanupResult,
+  onDismissCleanupResult
+}) => (
    <div className="space-y-6">
       {/* Update Button Header */}
       <div className="flex justify-between items-center">
@@ -1262,10 +1373,42 @@ const PackagesTab: React.FC<PackagesTabProps> = ({ metrics, onTriggerUpdate, isU
          </div>
 
          <div className="col-span-12 lg:col-span-6 flex flex-col gap-6">
+            {/* Cleanup Success Banner */}
+            {cleanupResult?.prUrl && (
+              <div className="p-4 bg-green-950/30 border border-green-900/50 rounded-lg">
+                <div className="flex items-center gap-2 text-green-400 mb-2">
+                  <RefreshCw size={20} />
+                  <span className="font-bold">Cleanup PR Created!</span>
+                </div>
+                <a
+                  href={cleanupResult.prUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-green-400 hover:text-green-300 underline flex items-center gap-1"
+                >
+                  <LinkIcon size={14} />
+                  {cleanupResult.prUrl}
+                </a>
+                {cleanupResult.message && (
+                  <p className="mt-2 text-sm text-slate-400">{cleanupResult.message}</p>
+                )}
+                {onDismissCleanupResult && (
+                  <button
+                    onClick={onDismissCleanupResult}
+                    className="mt-3 text-xs text-slate-500 hover:text-slate-400"
+                  >
+                    Dismiss
+                  </button>
+                )}
+              </div>
+            )}
+
             <DashboardCard title="Dependency Issues" className="h-[500px]">
                <DependencyIssues
                   unused={metrics.issues.unusedDependencies}
                   missing={metrics.issues.missingDependencies}
+                  onRemovePackages={onRemovePackages}
+                  isRemoving={isCleaningUp}
                />
             </DashboardCard>
          </div>

@@ -183,6 +183,25 @@ export async function getDb() {
       )
     `);
 
+    // Cleanup jobs table for removing unused dependencies
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS cleanup_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repositoryId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        packagesToRemove JSON NOT NULL,
+        status TEXT DEFAULT 'pending',
+        progress JSON,
+        result JSON,
+        logs TEXT,
+        startedAt DATETIME,
+        completedAt DATETIME,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id),
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
     // Automation settings per repository
     await sqliteDb.exec(`
       CREATE TABLE IF NOT EXISTS automation_settings (
@@ -320,6 +339,23 @@ export async function getDb() {
       id SERIAL PRIMARY KEY,
       "repositoryId" INTEGER NOT NULL REFERENCES repositories(id),
       "userId" INTEGER NOT NULL REFERENCES users(id),
+      status TEXT DEFAULT 'pending',
+      progress JSONB,
+      result JSONB,
+      logs TEXT,
+      "startedAt" TIMESTAMP,
+      "completedAt" TIMESTAMP,
+      "createdAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Cleanup jobs table for removing unused dependencies
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS cleanup_jobs (
+      id SERIAL PRIMARY KEY,
+      "repositoryId" INTEGER NOT NULL REFERENCES repositories(id),
+      "userId" INTEGER NOT NULL REFERENCES users(id),
+      "packagesToRemove" JSONB NOT NULL,
       status TEXT DEFAULT 'pending',
       progress JSONB,
       result JSONB,

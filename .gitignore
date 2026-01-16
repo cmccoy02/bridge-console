@@ -22,7 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-*.md
+
+tasks.md
+components/today.md
+today.md
+claude.md
+
 
 # Bridge-specific
 temp_scans/

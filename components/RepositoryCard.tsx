@@ -1,5 +1,5 @@
-import React from 'react';
-import { GitBranch, Calendar, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { GitBranch, Calendar, TrendingUp, TrendingDown, AlertCircle, Unlink } from 'lucide-react';
 
 interface Repository {
   id: number;
@@ -14,6 +14,7 @@ interface Repository {
 interface RepositoryCardProps {
   repo: Repository;
   onClick: () => void;
+  onDisconnect?: (id: number) => void;
 }
 
 // Skeleton loader for repository cards
@@ -40,7 +41,8 @@ export const RepositoryCardSkeleton: React.FC = () => (
   </div>
 );
 
-const RepositoryCard: React.FC<RepositoryCardProps> = ({ repo, onClick }) => {
+const RepositoryCard: React.FC<RepositoryCardProps> = ({ repo, onClick, onDisconnect }) => {
+  const [showConfirm, setShowConfirm] = useState(false);
   const score = repo.lastScore || 0;
   
   // Score-based color coding
@@ -152,6 +154,46 @@ const RepositoryCard: React.FC<RepositoryCardProps> = ({ repo, onClick }) => {
         {!repo.lastScanDate && (
           <div className="text-xs text-slate-600 italic">
             No scans yet • Click to start first scan
+          </div>
+        )}
+
+        {/* Disconnect button */}
+        {onDisconnect && (
+          <div className="flex justify-end mt-3 pt-3 border-t border-slate-800/50">
+            {!showConfirm ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowConfirm(true);
+                }}
+                className="flex items-center gap-1.5 text-[10px] text-slate-600 hover:text-red-500 transition-colors uppercase tracking-wider"
+              >
+                <Unlink size={10} />
+                Disconnect
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-500">Remove?</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDisconnect(repo.id);
+                  }}
+                  className="text-[10px] text-red-500 hover:text-red-400 font-bold uppercase"
+                >
+                  Yes
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowConfirm(false);
+                  }}
+                  className="text-[10px] text-slate-500 hover:text-white uppercase"
+                >
+                  No
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -1,252 +1,184 @@
-# Bridge MVP Roadmap - 30-60 Day Sprint
+# Bridge MVP Roadmap
 
 ## The Goal
 Get Bridge to a state where **5-10 dev teams can use it daily** to manage their technical debt. Not feature-complete, but genuinely useful.
 
-## Current Reality Check
-- ✅ Core analysis works well (NCU prioritization, 5D scoring)
-- ✅ UI is polished and distinctive
-- ✅ Scans now show real-time progress (7 phases with visual feedback)
-- ✅ Error handling with boundaries and inline errors
-- ✅ Input validation with helpful feedback
-- ✅ Search/filter/sort for repositories
-- ❌ Local-only (can't share with team)
-- ❌ Demo auth only
-- ❌ No persistence across devices
+---
+
+## Current Status (January 2026)
+
+### What's Working
+- Core analysis (NCU prioritization, 5D scoring)
+- Polished, distinctive UI
+- Real-time scan progress (7 phases)
+- Error handling with boundaries
+- Input validation with feedback
+- Search/filter/sort for repositories
+- Copy upgrade commands
+- NPM package links
+- Electron desktop app with embedded server
+- GitHub OAuth + Demo mode authentication
+- Auto-login for Electron users
+- Repository disconnect feature
+- Remove unused dependencies via PR
+- Minor/patch updates via PR
+- Automations tab with scheduling UI
+
+### What's Pending
+- Backend deployment (Railway/Vercel)
+- Scheduler service for automations
+- Historical trend charts
+- Organization/team support
 
 ---
 
-## Phase 1: Core Experience Polish (Week 1-2) ✅ COMPLETE
+## Phase 1: Core Experience Polish - COMPLETE
 
-**Goal:** Make the current product feel professional and responsive.
-
-### Must Have (P0) ✅
-
-- [x] **Scan Progress Indicators**
-  - Shows current phase: Cloning → Installing → Analyzing → Scoring
-  - Displays elapsed time
-  - Shows percentage and step count (Step 3/7)
-  - Files: `server/worker.js`, `App.tsx`, `components/ScanProgress.tsx`
-
-- [x] **Error Boundaries**
-  - React ErrorBoundary catches crashes gracefully
-  - InlineError component for non-fatal errors
-  - Copy error details button for bug reports
-  - File: `components/ErrorBoundary.tsx`
-
-- [x] **Input Validation**
-  - Validates GitHub URLs with real-time feedback
-  - Normalizes various input formats (owner/repo, github.com/..., etc.)
-  - Shows inline validation errors
-  - Files: `App.tsx`, `utils/validation.ts`
-
-- [x] **Loading States**
-  - Skeleton loaders for repository cards
-  - Loading state while fetching repos
-  - Proper loading indicators for all async operations
-
-### Nice to Have (P1) - Partially Complete
-
-- [ ] **Partial Results Display**
-  - Show analysis results as they complete (not just at the end)
-  - e.g., Show circular deps while NCU is still running
-  
-- [ ] **Scan Caching**
-  - Skip npm install if lockfile unchanged
-  - Cache analysis results for X hours
-  - "Re-scan" vs "Use cached results" option
-
-- [x] **Repository Search/Filter**
-  - Filter by name/owner
-  - Sort by score, date, name
-  - Quick filter: "Needs Attention" (score < 70)
-
-### Bonus Completed ✅
-
-- [x] **Copy Upgrade Commands**
-  - One-click copy for individual packages
-  - Bulk copy for upgrade path steps
-  
-- [x] **NPM Package Links**
-  - Direct links to npm package pages
+- [x] Scan progress indicators (7 phases)
+- [x] Error boundaries and inline errors
+- [x] Input validation with feedback
+- [x] Loading states and skeleton loaders
+- [x] Repository search/filter/sort
+- [x] Copy upgrade commands
+- [x] NPM package links
 
 ---
 
-## Phase 2: Deployment (Week 3-4)
+## Phase 2: Desktop App (Electron) - COMPLETE
 
-**Goal:** Get Bridge accessible from anywhere. This unblocks real user testing.
-
-### Infrastructure Setup
-
-- [x] **PostgreSQL Migration**
-  - ✅ Set up Supabase project (free tier)
-  - ✅ Update `server/db.js` for PostgreSQL
-  - ✅ Migrate schema (mostly compatible SQL)
-  - ✅ Created `.env.example` with DATABASE_URL format
-  - ⚠️ Connection needs verification (Supabase project may be paused)
-
-- [ ] **Backend Deployment (Railway)**
-  - Create Railway project
-  - Configure environment variables
-  - Set up GitHub auto-deploy
-  - Verify API endpoints work
-  - Estimated: 2-3 hours
-
-- [ ] **Frontend Deployment (Vercel)**
-  - Connect Vercel to repo
-  - Configure build settings
-  - Set up environment variables
-  - Custom domain (optional)
-  - Estimated: 1-2 hours
-
-- [x] **Environment Configuration**
-  - ✅ Create `.env.example` with all required vars
-  - Document deployment process
-  - Set up staging vs production environments
-
-### Post-Deployment Verification
-
-- [ ] End-to-end test: Add repo → Scan → View results
-- [ ] Performance baseline (scan time in production)
-- [ ] Error monitoring setup (Sentry free tier)
+- [x] Electron wrapper with embedded Express server
+- [x] Health check before window display
+- [x] Auto-login for desktop users
+- [x] Native app menu with keyboard shortcuts
+- [x] Tailwind CSS bundling (PostCSS)
+- [x] Proper Content Security Policy
+- [x] SQLite database with configurable path
 
 ---
 
-## Phase 3: Authentication (Week 5-6)
+## Phase 3: Repository Management - COMPLETE
 
-**Goal:** Real users with real accounts. Required for any multi-user features.
-
-### GitHub OAuth
-
-- [ ] **OAuth Flow**
-  - Create GitHub OAuth App
-  - Implement authorization redirect
-  - Handle callback and token exchange
-  - File: `server/index.js` (endpoints exist, need testing)
-
-- [ ] **Session Management**
-  - JWT or session cookies
-  - Secure token storage
-  - Auto-refresh tokens
-  - Logout functionality
-
-- [ ] **User-Scoped Data**
-  - Repositories belong to users
-  - Filter queries by userId
-  - "My Repositories" vs "Organization Repositories"
-
-- [ ] **Update UI**
-  - Replace "Demo User" with real user data
-  - Show GitHub avatar
-  - Add profile dropdown
-  - Settings page (basic)
+- [x] Add repositories via URL or GitHub browser
+- [x] Disconnect/remove repositories
+- [x] View scan history per repository
+- [x] Export scan results as JSON
 
 ---
 
-## Phase 4: Team Features (Week 7-8)
+## Phase 4: Automated Actions - COMPLETE
 
-**Goal:** Multiple people can collaborate on the same repos.
+- [x] Run minor/patch updates via PR
+- [x] Remove unused dependencies via PR
+- [x] Automations tab with scheduling UI
+- [x] Frequency options (manual/daily/weekly/monthly)
+- [ ] Scheduler service (settings saved, service not active)
 
-### Organization Support
+---
 
-- [ ] **Organization Model**
-  - Create organizations table
-  - User-organization membership
-  - Invite users to org
+## Phase 5: Deployment - IN PROGRESS
 
-- [ ] **Shared Repositories**
-  - Repos belong to orgs, not users
-  - All org members see same repos
-  - Scan history visible to all members
+### Infrastructure
+- [x] PostgreSQL schema ready (dual SQLite/Postgres support)
+- [x] Supabase project created
+- [ ] Backend deployment (Railway)
+- [ ] Frontend deployment (Vercel)
+- [ ] Environment configuration docs
+- [ ] End-to-end production testing
 
-- [ ] **Basic Permissions**
-  - Admin: Can add/remove repos, invite members
-  - Member: Can view and trigger scans
+---
 
-### Historical Trends
+## Phase 6: Authentication Enhancements - PARTIAL
 
-- [ ] **Score History Chart**
-  - Line chart of score over time
-  - Per-dimension trend lines
-  - "Score improved 12 points in 30 days"
+- [x] GitHub OAuth flow (basic)
+- [x] Demo mode for quick testing
+- [x] User session handling
+- [ ] Token refresh
+- [ ] User-scoped repositories
+- [ ] Organization support
 
-- [ ] **Changelog**
-  - What changed between scans?
-  - New issues, resolved issues
-  - Dependency changes
+---
+
+## Phase 7: Team Features - NOT STARTED
+
+- [ ] Organization model
+- [ ] Shared repositories
+- [ ] Team permissions (Admin/Member)
+- [ ] Historical trend charts
+- [ ] Score comparison between scans
 
 ---
 
 ## Backlog (Post-MVP)
 
-These are valuable but not required for initial launch:
-
-### Automation
+### Automation Enhancements
 - [ ] GitHub App integration (auto-scan on push)
 - [ ] PR comments with health score
-- [ ] Scheduled scans (weekly, daily)
+- [ ] Dependabot signal integration
 
 ### Notifications
 - [ ] Email alerts for score drops
-- [ ] Slack integration
+- [ ] Slack reports (daily/weekly)
 - [ ] Discord webhooks
 
 ### Advanced Analysis
 - [ ] Vulnerability scanning (npm audit)
 - [ ] License compliance checking
+- [ ] Monorepo support
 - [ ] Custom rule configuration
 
 ### Performance
 - [ ] Background job queue (BullMQ)
 - [ ] Parallel scans
-- [ ] File storage for artifacts (R2)
+- [ ] Scan caching
+- [ ] Large repo optimization
 
-### AI (Re-enable)
-- [ ] Gemini integration with better prompts
-- [ ] AI-generated upgrade guides
-- [ ] Natural language queries
+### Business
+- [ ] Organization profiles and goals
+- [ ] Improved scoring algorithm
+- [ ] Payment processing
+- [ ] Enterprise features
 
 ---
 
-## Quick Wins (Can Do Anytime)
+## Quick Wins
 
 Small improvements that punch above their weight:
 
-- [ ] **Copy upgrade commands** - One-click copy `npm install package@latest`
-- [ ] **Export as markdown** - Shareable scan report
-- [ ] **Keyboard shortcuts** - `r` to rescan, `f` to filter
-- [ ] **Dark/light mode toggle** - Some people want light mode
-- [ ] **Scan ETA** - "Based on repo size, ~45 seconds remaining"
-- [ ] **Package links** - Click package name → npm page
-- [ ] **Diff view** - Compare two scans side-by-side
-- [ ] **Repo tags** - Organize repos by team/project
+- [x] Copy upgrade commands
+- [x] NPM package links
+- [ ] Export as markdown report
+- [ ] Keyboard shortcuts (r=rescan, f=filter)
+- [ ] Dark/light mode toggle
+- [ ] Scan ETA based on repo size
+- [ ] Diff view (compare scans)
+- [ ] Repo tags for organization
 
 ---
 
-## Success Criteria
+## Technical Debt (In Our Own Codebase)
 
-### Week 2 ✅ COMPLETE
-- [x] Scans show progress (not just spinner)
-- [x] Errors are handled gracefully
-- [x] Input validation works
-- [x] Repository search/filter/sort
-- [x] Copy commands to clipboard
-- [x] NPM links for packages
+- [ ] Code-split the 622KB bundle
+- [ ] Add proper TypeScript strict mode
+- [ ] Unit tests for scoring logic
+- [ ] E2E tests for critical flows
+- [ ] Mobile responsive polish
+- [ ] Accessibility (ARIA labels)
+- [ ] Rate limiting on API
 
-### Week 4
-- [ ] Bridge is deployed and accessible at a URL
-- [ ] Can use from any device
-- [ ] Basic error monitoring in place
+---
 
-### Week 6
-- [ ] Real GitHub login works
-- [ ] User data persists
-- [ ] Repos are user-scoped
+## Risks & Open Questions
 
-### Week 8
-- [ ] Teams can share repositories
-- [ ] Historical trends visible
-- [ ] 5+ external users actively using it
+### Security Concerns
+- npm install in untrusted repos
+- GitHub rate limits
+- Scan abuse prevention
+
+### Business Questions
+- Pricing model (free tier + paid?)
+- Target audience (startups vs enterprise?)
+- GitHub App vs standalone?
+- Re-enable AI analysis or keep rule-based?
 
 ---
 
@@ -256,41 +188,8 @@ Small improvements that punch above their weight:
 - Supabase (free tier): $0
 - Railway (Hobby): $5
 - Vercel (free tier): $0
-- Sentry (free tier): $0
-- **Total: ~$5/month**
-
-### Time Investment
-- Phase 1: 15-20 hours
-- Phase 2: 10-15 hours
-- Phase 3: 15-20 hours
-- Phase 4: 20-25 hours
-- **Total: 60-80 hours** (30-40 with AI assistance)
+- Total: ~$5/month
 
 ---
 
-## Notes
-
-### What I'm Overlooking
-1. **Mobile responsiveness** - Works but not optimized
-2. **Accessibility** - No ARIA labels, keyboard nav is rough
-3. **Rate limiting** - Anyone could spam the API
-4. **Scan abuse** - No limits on scan frequency
-5. **Large repos** - What happens with 500k+ LOC repos?
-6. **Monorepos** - Multiple package.json files
-
-### Risks
-1. **npm install in untrusted repos** - Security concern
-2. **GitHub rate limits** - Could hit API limits
-3. **Supabase free tier limits** - May need to upgrade
-4. **Scan timeouts** - Large repos could exceed limits
-
-### Open Questions
-1. Pricing model? Free tier + paid?
-2. Target audience? Startups? Enterprise?
-3. Integrate with GitHub App or stay standalone?
-4. Re-enable AI analysis or keep it rule-based?
-
----
-
-Last Updated: 2024-12-19
-
+Last Updated: 2026-01-16
