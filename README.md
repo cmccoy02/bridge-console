@@ -1,164 +1,282 @@
 # Bridge
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Electron](https://img.shields.io/badge/electron-latest-blue.svg)](https://www.electronjs.org/)
+
 **Technical Debt Management Platform**
 
-Bridge helps engineering teams understand, quantify, and prioritize technical debt across repositories. It combines static code analysis with AI-powered recommendations to provide actionable insights - not just data.
+Bridge helps engineering teams understand, quantify, and fix technical debt across repositories. Get health scores, prioritized dependency updates, and automated pull requests - all through a simple dashboard.
+
+🚀 **[Install Bridge GitHub App](https://github.com/apps/bridge-console-dev)** | 📖 [View Documentation](tasks.md) | 💬 [Report Issues](https://github.com/cmccoy02/bridge-console/issues)
+
+---
+
+## ✨ What Bridge Does
+
+- 🔍 **Analyzes** your repositories for technical debt (circular dependencies, outdated packages, unused imports)
+- 📊 **Scores** repository health across 4 dimensions (Coupling, Freshness, Cleanliness, Hygiene)
+- 🎯 **Prioritizes** which dependencies to update based on security, stability, and impact
+- 🤖 **Automates** safe dependency updates by creating PRs directly to your GitHub repos
+- 📈 **Tracks** progress over time with scan history and health trends
+
+**No more manual npm outdated checks. No more forgotten security patches. Just one-click updates.**
 
 ## Features
 
-### 4-Dimensional Health Scoring
+### 🎯 4-Dimensional Health Scoring
 
 - **Coupling** - Circular dependency detection via Madge
 - **Freshness** - Outdated package tracking via npm-check-updates
 - **Cleanliness** - Unused/missing dependency detection via Depcheck
-- **Complexity** - Barrel file analysis for build performance
+- **Hygiene** - Code quality and structure analysis
 
-### AI-Powered Insights
+### 🤖 Automated Dependency Updates
 
-- Codebase compression via Repomix
-- Gemini 2.5 Flash analysis
-- Predictive forecasting (1/3/6-month trends)
-- Prioritized action items with effort/impact indicators
+- One-click minor/patch updates
+- Intelligent upgrade path suggestions
+- Automatic PR creation to your repository
+- Detailed changelogs and update logs
 
-### Multi-Repository Dashboard
+### 📊 Multi-Repository Dashboard
 
-- Monitor multiple repositories from one interface
-- Color-coded health indicators
-- Historical scan tracking
-- Detailed drill-down analysis per repository
+- Monitor all your repositories in one place
+- Real-time health scores and trend tracking
+- Search, filter, and sort repositories
+- Detailed dependency analysis and recommendations
 
 ## Quick Start
 
-### Prerequisites
+### 1. Install the Bridge GitHub App
 
-- Node.js 18+
-- Git
-- GitHub Personal Access Token
-- Gemini API Key
+Visit **[https://github.com/apps/bridge-console-dev](https://github.com/apps/bridge-console-dev)** and click "Install" to authorize Bridge for your repositories.
 
-### Installation
+The app needs these permissions:
+- **Read & Write** to code (for creating PRs with dependency updates)
+- **Read** access to metadata and repository contents
+
+### 2. Run Bridge Desktop App
 
 ```bash
+# Clone the repository
+git clone https://github.com/cmccoy02/bridge-console.git
+cd bridge-console
+
 # Install dependencies
 npm install
 
-# Configure environment
-cp .env.example .env
-# Edit .env and add your GITHUB_TOKEN and GEMINI_API_KEY
-
-# Start the application
+# Start Bridge
 npm start
 ```
 
-The app will start on:
-- Frontend: http://localhost:3000
-- Backend: http://localhost:3001
+The app will open in Electron with an integrated Node.js backend.
 
-### Getting API Keys
+### 3. Sign In with GitHub
 
-**GitHub Token:**
-1. Go to https://github.com/settings/tokens
-2. Generate new token (classic)
-3. Select `repo` scope
-4. Copy token to `.env`
+1. Click **"Sign in with GitHub"**
+2. Authorize Bridge to access your account
+3. You're ready to start scanning repositories!
 
-**Gemini API Key:**
-1. Go to https://aistudio.google.com/apikey
-2. Create API Key
-3. Copy to `.env`
+### 4. Start Monitoring
+
+1. Click **"Add Repository"** and enter a GitHub URL
+2. Bridge will clone, analyze, and score the repository
+3. View health metrics, outdated dependencies, and recommendations
+4. Click **"Run minor/patch updates"** to automatically create a PR with safe updates
 
 ## How It Works
 
-1. **Clone & Analyze** - Git clone → npm install → run analysis suite
-2. **Static Analysis** - Madge, Depcheck, NCU, git analysis
-3. **AI Analysis** - Repomix compression → Gemini insights
-4. **Smart Scoring** - Size-normalized penalties across 4 dimensions
-5. **Actionable Output** - Prioritized recommendations, not just problems
+1. **Scan & Analyze** - Clone repository → run dependency analysis → calculate health scores
+2. **Static Analysis** - Detect circular dependencies, unused packages, outdated versions
+3. **Smart Scoring** - Rule-based scoring system with size-normalized penalties
+4. **Automated Updates** - Generate upgrade paths → run npm update → create GitHub PR
+5. **Actionable Insights** - Clear, prioritized recommendations with risk indicators
 
 ## Tech Stack
 
-- **Frontend:** React + Vite + TypeScript + Tailwind CSS
-- **Backend:** Node.js + Express
-- **Database:** SQLite (local MVP) → PostgreSQL (production)
-- **Analysis:** Madge, Depcheck, npm-check-updates, Repomix
-- **AI:** Google Gemini 2.5 Flash
+- **Desktop:** Electron (cross-platform)
+- **Frontend:** React 18 + Vite + TypeScript + Tailwind CSS
+- **Backend:** Node.js + Express (integrated)
+- **Database:** SQLite (local) with PostgreSQL support (Supabase)
+- **Analysis:** Madge, Depcheck, npm-check-updates
+- **GitHub Integration:** OAuth App + GitHub REST API
+- **Version Control:** simple-git for automated commits/pushes
 
 ## Architecture
 
 ```
-Frontend (Vite) → Express API → Worker Process
-                      ↓              ↓
-                  SQLite DB    Analysis Pipeline
+Electron Desktop App
+     ↓
+React Frontend ↔ Express API ↔ Worker Processes
+     ↓               ↓              ↓
+  UI Layer      SQLite DB     Scan & Update Jobs
                                      ↓
-                          Git Clone → Static Analysis
-                                     ↓
-                          Repomix → AI Analysis
-                                     ↓
-                          Store Results
+                    ┌────────────────┴────────────────┐
+                    ↓                                 ↓
+            Scan Pipeline                     Update Pipeline
+         (Clone → Analyze                  (Clone → npm update
+          → Score)                         → Commit → PR)
 ```
 
 ## Project Structure
 
 ```
 bridge-console/
-├── App.tsx              # Main React application
-├── types.ts             # TypeScript interfaces
-├── components/          # React components
+├── electron/
+│   ├── main.js           # Electron main process
+│   └── preload.js        # Preload scripts
+├── components/
+│   ├── TriageList.tsx    # Dependency analysis UI
+│   ├── GitHubBrowser.tsx # Repository browser
+│   ├── ScanProgress.tsx  # Scan status tracking
+│   └── UpdateProgress.tsx # Update job tracking
 ├── server/
-│   ├── index.js        # Express API
-│   ├── worker.js       # Scan processing
-│   └── db.js           # Database setup
-├── systemprompt.md     # AI analysis instructions
-└── bridge.sqlite       # Local database
+│   ├── index.js          # Express API server
+│   ├── worker.js         # Repository scan worker
+│   ├── update-worker.js  # Dependency update worker
+│   └── db.js             # Database adapter (SQLite/PostgreSQL)
+├── App.tsx               # Main React application
+├── types.ts              # TypeScript interfaces
+└── bridge.sqlite         # Local database (auto-created)
 ```
 
 ## Development
 
 ```bash
-# Run frontend only
-npm run dev
-
-# Run backend only
-npm run server
-
-# Run both
+# Run in development mode (Electron with hot reload)
 npm start
 
-# Reset database
-npm run reset-db
+# Build for production
+npm run build
+
+# Package Electron app
+npm run electron:build
+
+# Run web version only (without Electron)
+npm run dev        # Frontend (port 3000)
+npm run server     # Backend (port 3001)
 ```
+
+## Configuration
+
+Bridge works out of the box, but you can customize:
+
+**Optional: Connect PostgreSQL (Supabase)**
+
+Create a `.env` file in the project root:
+
+```bash
+# Database (optional - uses SQLite if not set)
+DATABASE_URL=postgresql://user:pass@host:5432/dbname
+
+# GitHub OAuth (required for multi-user deployment)
+GITHUB_CLIENT_ID=your_oauth_app_client_id
+GITHUB_CLIENT_SECRET=your_oauth_app_client_secret
+GITHUB_REDIRECT_URI=http://localhost:3000/auth/callback
+JWT_SECRET=your_random_secret_key
+```
+
+For local testing, you can skip this - Bridge defaults to SQLite.
 
 ## Documentation
 
-- `claude.md` - Comprehensive product context and development plans
-- `SETUP.md` - Detailed setup guide and troubleshooting
-- `context.md` - Senior engineer feedback and priorities
-- `systemprompt.md` - AI analysis configuration
+- **[tasks.md](tasks.md)** - Development roadmap and task tracker
+- **[claude.md](claude.md)** - Product architecture and technical decisions
+- **[SETUP-INFRASTRUCTURE.md](SETUP-INFRASTRUCTURE.md)** - Production deployment guide
 
 ## Roadmap
 
-**Phase 1: Enhanced Analysis** (Current Priority)
-- Intelligent dependency prioritization
-- Peer dependency relationship tracking
-- Upgrade path visualization
-- Rule-based weighting system
+See **[tasks.md](tasks.md)** for the full roadmap. Current priorities:
 
-**Phase 2: Infrastructure**
-- PostgreSQL migration (Supabase)
-- Cloud deployment (Vercel + Railway)
-- Background job queue (BullMQ + Redis)
-- Persistent file storage (Cloudflare R2)
+**✅ Phase 1: Core Experience** (Completed)
+- Health scoring and dependency analysis
+- Progress indicators and error handling
+- Input validation and loading states
+- Repository search, filter, and sort
 
-**Phase 3: Collaboration**
-- GitHub OAuth authentication
-- Multi-user support
-- Organization-level separation
-- Team permissions
+**✅ Phase 2: Automated Updates** (Completed)
+- One-click minor/patch updates
+- Automated PR creation
+- Upgrade path suggestions
+- Update job tracking
+
+**🚧 Phase 3: Electron Desktop App** (In Progress)
+- Cross-platform desktop application
+- Integrated backend
+- Native OS integration
+
+**📋 Phase 4: Teams & Collaboration** (Planned)
+- Team workspaces
+- Role-based permissions
+- Shared repository management
+- Activity feeds and notifications
+
+## FAQ
+
+### How do I grant Bridge access to my repositories?
+
+Install the Bridge GitHub App at [https://github.com/apps/bridge-console-dev](https://github.com/apps/bridge-console-dev), then sign in to Bridge Desktop. You'll be able to scan any repositories you've granted access to.
+
+### Does Bridge modify my code?
+
+Bridge only creates PRs when you explicitly click "Run minor/patch updates". It never automatically merges changes. All updates go through normal GitHub PR review workflow.
+
+### What dependencies does Bridge update?
+
+Bridge only updates to **minor** and **patch** versions (e.g., `1.2.3` → `1.2.9` or `1.5.0`), avoiding breaking changes. It skips major version bumps to keep updates safe.
+
+### Where are scanned repositories stored?
+
+Bridge clones repositories to a temporary directory (`temp_scans/` or `temp_updates/`) for analysis, then deletes them after the scan completes. Nothing is permanently stored except analysis results in the local database.
+
+### Can I use Bridge with private repositories?
+
+Yes! Once you install the Bridge GitHub App and grant it access to private repositories, you can scan them just like public ones.
+
+### Does Bridge work with monorepos?
+
+Bridge works best with single-package repositories. Monorepo support (lerna, nx, turborepo) is on the roadmap.
+
+### How do I view Bridge's database?
+
+Bridge uses SQLite by default. You can view the `bridge.sqlite` file with any SQLite browser:
+```bash
+sqlite3 bridge.sqlite "SELECT * FROM repositories;"
+```
+
+## Troubleshooting
+
+### "Authentication failed" when creating PRs
+
+Your GitHub OAuth token may have expired. Sign out of Bridge and sign back in to refresh your token.
+
+### Organization repositories not showing up
+
+Your organization may have OAuth App Access Restrictions enabled. Ask an admin to approve the Bridge app at:
+`https://github.com/orgs/YOUR_ORG/settings/oauth_application_policy`
+
+### Scan fails with "Command failed: git clone"
+
+Ensure Bridge GitHub App has access to the repository. Check your installations at:
+`https://github.com/settings/installations`
 
 ## Contributing
 
-Bridge is currently in active development. For questions or feedback, please open an issue.
+Bridge is in active development! To contribute:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+For bugs or feature requests, please [open an issue](https://github.com/cmccoy02/bridge-console/issues).
+
+## Support
+
+- **GitHub Issues:** [github.com/cmccoy02/bridge-console/issues](https://github.com/cmccoy02/bridge-console/issues)
+- **GitHub App:** [github.com/apps/bridge-console-dev](https://github.com/apps/bridge-console-dev)
 
 ## License
 
-MIT
+MIT © 2026 Connor McCoy
