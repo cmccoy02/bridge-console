@@ -195,7 +195,9 @@ ${packageList}
 }
 
 export async function processUpdate(jobId, repository, accessToken, db) {
-  const TEMP_DIR = path.resolve(`./temp_updates/${jobId}`);
+  // Use TEMP_UPDATES_DIR env var if set (for Electron), otherwise default
+  const tempBase = process.env.TEMP_UPDATES_DIR || path.resolve('./temp_updates');
+  const TEMP_DIR = path.join(tempBase, String(jobId));
   const startTime = Date.now();
 
   try {

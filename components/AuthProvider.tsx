@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Check if running in Electron
+const isElectron = typeof window !== 'undefined' && (window as any).bridge?.isElectron;
+
 interface User {
   id: number;
   username: string;
@@ -47,9 +50,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (res.ok) {
         const userData = await res.json();
         setUser(userData);
+      } else if (isElectron) {
+        // Auto-login in Electron mode for seamless experience
+        console.log('[Auth] Electron detected, auto-logging in demo mode');
+        await loginDemo();
       }
     } catch (error) {
       console.error('Session check error:', error);
+      // In Electron, auto-login on error too (likely server starting up)
+      if (isElectron) {
+        console.log('[Auth] Auto-login after error in Electron mode');
+        try {
+          await loginDemo();
+        } catch (e) {
+          console.error('Auto demo login failed:', e);
+        }
+      }
     } finally {
       setIsLoading(false);
     }

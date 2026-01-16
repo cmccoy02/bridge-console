@@ -2,7 +2,11 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+const isElectron = process.env.ELECTRON === 'true';
+
 export default defineConfig({
+  // Use relative base for Electron file:// protocol
+  base: isElectron ? './' : '/',
   server: {
     port: 3000,
     host: '0.0.0.0',
@@ -30,6 +34,18 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+    }
+  },
+  build: {
+    // Electron needs relative paths for assets
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        // Ensure consistent naming for production
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
+      }
     }
   }
 });

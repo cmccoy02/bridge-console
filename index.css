@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* OCR-A Font for titles */
+@font-face {
+  font-family: 'OCR-A';
+  src: url('/fonts/OCR-a___.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+body {
+  background-color: #050505;
+  color: #e2e8f0;
+}
+
+/* Tech Grid Background */
+.bg-tech-grid {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(255, 94, 0, 0.05) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(255, 94, 0, 0.05) 1px, transparent 1px);
+}
+
+/* Sharp Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff5e00;
+}
+
+/* CRT Flicker Effect Animation */
+@keyframes flicker {
+  0% { opacity: 0.97; }
+  5% { opacity: 0.95; }
+  10% { opacity: 0.9; }
+  15% { opacity: 0.95; }
+  20% { opacity: 0.99; }
+  100% { opacity: 0.97; }
+}
+.crt-flicker {
+  animation: flicker 4s infinite;
+}

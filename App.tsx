@@ -14,6 +14,8 @@ import ScanHistory from './components/ScanHistory';
 import ScanProgress from './components/ScanProgress';
 import ErrorBoundary, { InlineError } from './components/ErrorBoundary';
 import ActionableTasks from './components/ActionableTasks';
+import WelcomeScreen from './components/WelcomeScreen';
+import ConnectionError from './components/ConnectionError';
 import { validateGitHubUrl, type ValidationResult } from './utils/validation';
 import mockData from './mock-bridge-metrics.json';
 import {
@@ -116,20 +118,25 @@ const AppContent: React.FC = () => {
     }
   }, [handleOAuthCallback]);
 
-  // Check backend connection and load repositories
+  // Check backend connection and load repositories with retry
   // NOTE: This hook must be called unconditionally before any early returns
   useEffect(() => {
     // Only run if user is authenticated
     if (!user || authLoading) return;
-    
+
+    let retryCount = 0;
+    const maxRetries = 5;
+    const retryDelay = 2000;
+
     const checkBackend = async () => {
       try {
-        console.log('[Bridge] Checking backend connection...');
+        console.log('[Bridge] Checking backend connection... (attempt', retryCount + 1, ')');
         const res = await fetch(`${API_URL}/api/health`);
         if (res.ok) {
           const data = await res.json();
           console.log('[Bridge] Backend connected:', data);
           setBackendConnected(true);
+          setError(null);
           if (!data.hasGitHubToken) {
             setError('Backend running but GITHUB_TOKEN not found. Add it to your .env file.');
           }
@@ -137,12 +144,20 @@ const AppContent: React.FC = () => {
           // Load repositories
           loadRepositories();
         } else {
-          setBackendConnected(false);
+          throw new Error('Backend returned non-OK status');
         }
       } catch (err) {
         console.error('[Bridge] Backend connection failed:', err);
-        setBackendConnected(false);
-        setError('Backend not responding. Run: npm run server');
+        retryCount++;
+
+        if (retryCount < maxRetries) {
+          setStatusMessage(`Connecting to server... (${retryCount}/${maxRetries})`);
+          setTimeout(checkBackend, retryDelay);
+        } else {
+          setBackendConnected(false);
+          setStatusMessage('');
+          setError('Could not connect to backend server. Please ensure the server is running.');
+        }
       }
     };
     checkBackend();
@@ -156,6 +171,30 @@ const AppContent: React.FC = () => {
       }
     };
   }, []);
+
+  // Retry backend connection
+  const retryConnection = async () => {
+    setError(null);
+    setStatusMessage('Reconnecting...');
+    try {
+      const res = await fetch(`${API_URL}/api/health`);
+      if (res.ok) {
+        const data = await res.json();
+        setBackendConnected(true);
+        setStatusMessage('');
+        if (!data.hasGitHubToken) {
+          setError('Backend running but GITHUB_TOKEN not found. Add it to your .env file.');
+        }
+        loadRepositories();
+      } else {
+        throw new Error('Backend not available');
+      }
+    } catch (err) {
+      setBackendConnected(false);
+      setStatusMessage('');
+      setError('Could not connect to backend server.');
+    }
+  };
 
   // Show login screen if not authenticated
   if (authLoading) {
@@ -468,7 +507,7 @@ const AppContent: React.FC = () => {
   const exportCurrentScan = () => {
     if (currentScanId || selectedRepo?.lastScanId) {
       const scanId = currentScanId || selectedRepo?.lastScanId;
-      window.open(`/api/scans/${scanId}/export`, '_blank');
+      window.open(`${API_URL}/api/scans/${scanId}/export`, '_blank');
     } else if (metrics) {
       // Fallback: export current metrics as JSON
       const blob = new Blob([JSON.stringify(metrics, null, 2)], { type: 'application/json' });
@@ -482,7 +521,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleExportScan = (scanId: number) => {
-    window.open(`/api/scans/${scanId}/export`, '_blank');
+    window.open(`${API_URL}/api/scans/${scanId}/export`, '_blank');
   };
 
   const resetSystem = () => {
@@ -549,21 +588,34 @@ const AppContent: React.FC = () => {
 
       {/* --- MAIN CONTENT AREA --- */}
       <main className="flex-1 p-4 md:p-8 max-w-[1600px] mx-auto w-full">
-        
-        {/* VIEW: REPOSITORIES OVERVIEW */}
-        {viewMode === 'repositories' && !isScanning && (
-          <div className="animate-in fade-in duration-500">
-            <div className="mb-6">
-              <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase">
-                {user?.username}'s Dashboard
-              </h2>
-              <p className="text-slate-400 font-mono text-sm">
-                Monitor technical debt across your repositories
-              </p>
-            </div>
 
-            {/* Search and Filter Bar */}
-            {!isLoadingRepos && repositories.length > 0 && (
+        {/* Show connection error when backend is offline */}
+        {backendConnected === false && (
+          <ConnectionError
+            onRetry={retryConnection}
+            message={error || undefined}
+          />
+        )}
+
+        {/* VIEW: REPOSITORIES OVERVIEW */}
+        {viewMode === 'repositories' && !isScanning && backendConnected !== false && (
+          <div className="animate-in fade-in duration-500">
+            {/* Show Welcome Screen for first-time users with no repositories */}
+            {!isLoadingRepos && repositories.length === 0 ? (
+              <WelcomeScreen onGetStarted={() => setViewMode('add-repository')} />
+            ) : (
+              <>
+                <div className="mb-6">
+                  <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase">
+                    {user?.username}'s Dashboard
+                  </h2>
+                  <p className="text-slate-400 font-mono text-sm">
+                    Monitor technical debt across your repositories
+                  </p>
+                </div>
+
+                {/* Search and Filter Bar */}
+                {!isLoadingRepos && repositories.length > 0 && (
               <div className="mb-6 flex flex-col sm:flex-row gap-3">
                 {/* Search Input */}
                 <div className="relative flex-1">
@@ -685,11 +737,13 @@ const AppContent: React.FC = () => {
                 </>
               )}
             </div>
+              </>
+            )}
           </div>
         )}
 
         {/* VIEW: ADD REPOSITORY */}
-        {viewMode === 'add-repository' && !isScanning && (
+        {viewMode === 'add-repository' && !isScanning && backendConnected !== false && (
           <div className="min-h-[70vh] flex flex-col items-center justify-start pt-8 animate-in fade-in zoom-in duration-500">
 
              <div className="w-full max-w-2xl relative">
@@ -826,7 +880,7 @@ const AppContent: React.FC = () => {
         )}
 
         {/* VIEW: REPOSITORY DETAIL (unchanged from original scanner input) */}
-        {viewMode === 'repository-detail' && !metrics && !isScanning && (
+        {viewMode === 'repository-detail' && !metrics && !isScanning && backendConnected !== false && (
           <div className="h-[70vh] flex flex-col items-center justify-center animate-in fade-in zoom-in duration-500">
              
              <div className="w-full max-w-2xl relative">
@@ -882,7 +936,7 @@ const AppContent: React.FC = () => {
         )}
 
         {/* VIEW: DASHBOARD */}
-        {viewMode === 'repository-detail' && metrics && (
+        {viewMode === 'repository-detail' && metrics && backendConnected !== false && (
            <div className="animate-in slide-in-from-bottom-4 duration-700">
               {/* Dashboard Header */}
               <div className="flex justify-between items-end mb-6 border-b border-slate-800 pb-2">

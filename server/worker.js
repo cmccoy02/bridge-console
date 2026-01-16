@@ -48,8 +48,9 @@ async function updateProgress(db, scanId, phase, details = {}) {
 }
 
 export async function processScan(scanId, repoUrl, repositoryId, db) {
-  // Use absolute path outside of project to avoid Vite watching
-  const TEMP_DIR = path.resolve(`./temp_scans/${scanId}`);
+  // Use TEMP_SCANS_DIR env var if set (for Electron), otherwise default
+  const tempBase = process.env.TEMP_SCANS_DIR || path.resolve('./temp_scans');
+  const TEMP_DIR = path.join(tempBase, String(scanId));
   const startTime = Date.now();
   
   try {

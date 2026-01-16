@@ -29,3 +29,13 @@ temp_scans/
 bridge.sqlite
 .env
 bridge-metrics.json
+
+# Electron Specific
+release/
+
+# Cursor Specific
+.cursorignore
+.cursorrules
+
+# Claude Specific
+.claude/

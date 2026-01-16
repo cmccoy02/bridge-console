@@ -79,11 +79,15 @@ export async function getDb() {
   // Use SQLite for local development if DATABASE_URL not set
   if (!USE_POSTGRES) {
     console.log('[DB] Using SQLite (local development mode)');
-    
+
     if (sqliteDb) return sqliteDb;
-    
+
+    // Use DATABASE_PATH env var if set (for Electron), otherwise default
+    const dbPath = process.env.DATABASE_PATH || './bridge.sqlite';
+    console.log('[DB] SQLite database path:', dbPath);
+
     sqliteDb = await open({
-      filename: './bridge.sqlite',
+      filename: dbPath,
       driver: sqlite3.Database
     });
     
