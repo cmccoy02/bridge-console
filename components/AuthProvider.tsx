@@ -135,10 +135,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         method: 'POST',
         credentials: 'include'
       });
+      
+      // Clear local state
+      setUser(null);
+      
+      // Show instructions for switching accounts
+      if (window.confirm(
+        '✅ You\'ve been logged out of Bridge.\n\n' +
+        '💡 To sign in with a different GitHub account:\n' +
+        '1. First log out of GitHub in your browser\n' +
+        '2. Then click "Sign in with GitHub" again\n\n' +
+        'Open GitHub logout page now?'
+      )) {
+        // Open GitHub logout page
+        if (isElectron && (window as any).bridge?.openExternal) {
+          (window as any).bridge.openExternal('https://github.com/logout');
+        } else {
+          window.open('https://github.com/logout', '_blank');
+        }
+      }
     } catch (error) {
       console.error('Logout error:', error);
+      setUser(null);
     }
-    setUser(null);
   };
 
   return (

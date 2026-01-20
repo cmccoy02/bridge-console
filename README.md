@@ -47,8 +47,18 @@ Report issues at [github.com/cmccoy02/bridge-console/issues](https://github.com/
 ## Development
 
 ```bash
-npm start          # Electron app with backend
-npm run dev        # Web frontend only (port 3000)
+# Development (runs Electron with hot-reload)
+npm run dev        # Start server + vite + electron
+
+# Web-only development (without Electron)
+npm run dev:web    # Start server + vite only
+
+# Production build
+npm run build      # Build and package Electron app
+npm run build:web  # Build web version only
+
+# Other commands
+npm start          # Run pre-built Electron app
 npm run server     # Backend only (port 3001)
 ```
 

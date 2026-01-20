@@ -671,10 +671,11 @@ const AppContent: React.FC = () => {
              </div>
              <button 
                onClick={logout}
-               className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors"
+               className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors group"
+               title="Sign out and switch GitHub account"
              >
                <LogOut size={14} />
-               <span>Logout</span>
+               <span className="hidden sm:inline">Sign Out</span>
              </button>
           </div>
         </div>
