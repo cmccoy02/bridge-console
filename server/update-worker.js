@@ -8,14 +8,15 @@ const execPromise = util.promisify(exec);
 
 // Progress phases for update tracking
 const UPDATE_PHASES = {
-  INITIALIZING: { step: 1, total: 8, label: 'Initializing update...' },
-  CLONING: { step: 2, total: 8, label: 'Cloning repository...' },
-  CHECKOUT_BRANCH: { step: 3, total: 8, label: 'Preparing patch branch...' },
-  CLEAN_INSTALL_1: { step: 4, total: 8, label: 'Clean install (phase 1)...' },
-  NPM_UPDATE: { step: 5, total: 8, label: 'Running npm update...' },
-  CLEAN_INSTALL_2: { step: 6, total: 8, label: 'Clean install (phase 2)...' },
-  COMMIT_PUSH: { step: 7, total: 8, label: 'Committing and pushing changes...' },
-  CREATE_PR: { step: 8, total: 8, label: 'Creating pull request...' }
+  INITIALIZING: { step: 1, total: 9, label: 'Initializing update...' },
+  CLONING: { step: 2, total: 9, label: 'Cloning repository...' },
+  CHECKOUT_BRANCH: { step: 3, total: 9, label: 'Preparing patch branch...' },
+  CLEAN_INSTALL_1: { step: 4, total: 9, label: 'Clean install (phase 1)...' },
+  NPM_UPDATE: { step: 5, total: 9, label: 'Running npm update...' },
+  CLEAN_INSTALL_2: { step: 6, total: 9, label: 'Clean install (phase 2)...' },
+  VALIDATION: { step: 7, total: 9, label: 'Validating updates...' },
+  COMMIT_PUSH: { step: 8, total: 9, label: 'Committing and pushing changes...' },
+  CREATE_PR: { step: 9, total: 9, label: 'Creating pull request...' }
 };
 
 const PATCH_BRANCH = 'bridge/patch-updates';
@@ -104,6 +105,97 @@ async function getLockfileVersions(lockFilePath) {
   }
 }
 
+// Detect which validation scripts are available in package.json
+async function detectValidationScripts(packageJsonPath) {
+  try {
+    const content = await fs.readFile(packageJsonPath, 'utf-8');
+    const pkg = JSON.parse(content);
+    const scripts = pkg.scripts || {};
+
+    const available = [];
+
+    // Check for TypeScript/build validation
+    if (scripts.build) {
+      available.push({ name: 'build', command: 'npm run build', description: 'TypeScript/build check' });
+    } else if (scripts['type-check'] || scripts.typecheck) {
+      const cmd = scripts['type-check'] ? 'type-check' : 'typecheck';
+      available.push({ name: cmd, command: `npm run ${cmd}`, description: 'TypeScript check' });
+    }
+
+    // Check for linting
+    if (scripts.lint) {
+      available.push({ name: 'lint', command: 'npm run lint', description: 'Linting' });
+    }
+
+    // Check for tests
+    if (scripts.test && !scripts.test.includes('no test specified')) {
+      available.push({ name: 'test', command: 'npm test', description: 'Tests' });
+    }
+
+    return available;
+  } catch (e) {
+    console.error('[UpdateWorker] Error detecting validation scripts:', e.message);
+    return [];
+  }
+}
+
+// Run validation scripts and return results
+async function runValidation(cwd, scripts, db, jobId, appendLog) {
+  const results = {
+    passed: true,
+    checks: [],
+    failedCheck: null
+  };
+
+  if (scripts.length === 0) {
+    await appendLog(db, jobId, 'No validation scripts found in package.json (build, lint, test)');
+    return results;
+  }
+
+  await appendLog(db, jobId, `Found ${scripts.length} validation script(s): ${scripts.map(s => s.name).join(', ')}`);
+
+  for (const script of scripts) {
+    await appendLog(db, jobId, `Running ${script.description}...`);
+
+    try {
+      const { stdout, stderr } = await execPromise(script.command, {
+        cwd,
+        maxBuffer: 1024 * 1024 * 50,
+        timeout: 5 * 60 * 1000 // 5 minute timeout per check
+      });
+
+      results.checks.push({
+        name: script.name,
+        passed: true,
+        output: stdout.slice(-500) // Last 500 chars
+      });
+
+      await appendLog(db, jobId, `✓ ${script.description} passed`);
+    } catch (error) {
+      results.passed = false;
+      results.failedCheck = script.name;
+
+      // Extract useful error output
+      const errorOutput = error.stderr || error.stdout || error.message;
+      const truncatedError = errorOutput.slice(-1000); // Last 1000 chars of error
+
+      results.checks.push({
+        name: script.name,
+        passed: false,
+        output: truncatedError
+      });
+
+      await appendLog(db, jobId, `✗ ${script.description} failed`);
+      await appendLog(db, jobId, `Error output:\n${truncatedError}`);
+
+      // Stop on first failure
+      break;
+    }
+  }
+
+  return results;
+}
+
 // Compare two lockfile snapshots to find changes
 function findChangedPackages(before, after) {
   const changes = [];
@@ -126,12 +218,25 @@ function findChangedPackages(before, after) {
 }
 
 // Create PR via GitHub API
-async function createPullRequest(accessToken, owner, repo, baseBranch, headBranch, changedPackages) {
+async function createPullRequest(accessToken, owner, repo, baseBranch, headBranch, changedPackages, validationResults = null) {
   const title = `chore(deps): update ${changedPackages.length} minor/patch dependencies`;
 
   const packageList = changedPackages
     .map(p => `- \`${p.name}\`: ${p.from} -> ${p.to}${p.isDev ? ' (dev)' : ''}`)
     .join('\n');
+
+  // Build validation status section
+  let validationSection = '';
+  if (validationResults && validationResults.checks.length > 0) {
+    const checkList = validationResults.checks
+      .map(c => `- [x] ${c.name}`)
+      .join('\n');
+    validationSection = `### Pre-merge Validation
+These checks passed before this PR was created:
+${checkList}
+
+`;
+  }
 
   const body = `## Automated Dependency Updates
 
@@ -143,13 +248,14 @@ ${packageList}
 ### Changes Made
 - Ran \`npm update\` to update minor/patch versions
 - Performed clean reinstall to ensure lock file consistency
+- Validated updates pass project checks
 
-### Testing Checklist
+${validationSection}### Testing Checklist
 - [ ] CI passes
 - [ ] Manual smoke test (if applicable)
 
 ---
-*Generated by [Bridge](https://github.com/anthropics/bridge-console) - Technical Debt Management Platform*`;
+*Generated by [Bridge](https://github.com/cmccoy02/bridge-console) - Technical Debt Management Platform*`;
 
   const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
     method: 'POST',
@@ -353,7 +459,38 @@ export async function processUpdate(jobId, repository, accessToken, db) {
       console.log(`[UpdateWorker]   - ${p.name}: ${p.from} -> ${p.to}`);
     });
 
-    // 6. Commit and push
+    // 6. Validate updates pass build/lint/test
+    await updateProgress(db, jobId, UPDATE_PHASES.VALIDATION, { detail: 'Running validation checks...' });
+    await appendLog(db, jobId, 'Validating updates...');
+
+    const validationScripts = await detectValidationScripts(packageJsonPath);
+    const validationResults = await runValidation(TEMP_DIR, validationScripts, db, jobId, appendLog);
+
+    if (!validationResults.passed) {
+      const failedCheck = validationResults.failedCheck;
+      const failedOutput = validationResults.checks.find(c => !c.passed)?.output || 'Unknown error';
+
+      await appendLog(db, jobId, `Validation failed: ${failedCheck} check did not pass`);
+      await appendLog(db, jobId, 'PR will not be created. Updates may have introduced breaking changes.');
+
+      await db.run(
+        'UPDATE update_jobs SET status = ?, result = ?, "completedAt" = CURRENT_TIMESTAMP WHERE id = ?',
+        ['failed', JSON.stringify({
+          error: `Validation failed: ${failedCheck}`,
+          validationResults,
+          changedPackages,
+          message: 'Updates did not pass validation checks. The PR was not created to prevent breaking changes.'
+        }), jobId]
+      );
+
+      // Cleanup
+      await fs.remove(TEMP_DIR);
+      return;
+    }
+
+    await appendLog(db, jobId, 'All validation checks passed');
+
+    // 7. Commit and push
     await updateProgress(db, jobId, UPDATE_PHASES.COMMIT_PUSH, { detail: `Committing ${changedPackages.length} package updates...` });
     await appendLog(db, jobId, 'Staging changes...');
 
@@ -404,7 +541,8 @@ Generated by Bridge`;
       repoName,
       defaultBranch,
       PATCH_BRANCH,
-      changedPackages
+      changedPackages,
+      validationResults
     );
 
     if (pr.alreadyExists) {
