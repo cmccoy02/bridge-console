@@ -135,6 +135,15 @@ export interface BridgeMetrics {
       status: 'dead' | 'stale' | 'active';
       lastCommitDate: string;
     }>;
+    // Code Quality Metrics
+    hasTypeScript?: boolean;
+    hasMixedTsJs?: boolean;
+    testFileCount?: number;
+    hasTestConfig?: boolean;
+    hasReadme?: boolean;
+    readmeLength?: number;
+    hasChangelog?: boolean;
+    hasContributing?: boolean;
   };
   score: {
     total: number;
@@ -247,6 +256,24 @@ export interface BridgeMetrics {
       reasoning: string;
     }>;
     summary: string;
+  };
+  codeQuality?: {
+    todoCount: number;
+    consoleLogCount: number;
+    deepDirectories?: number;
+    todoItems?: Array<{
+      file: string;
+      line: number;
+      type: string;
+      text: string;
+      context: string;
+    }>;
+    consoleLogItems?: Array<{
+      file: string;
+      line: number;
+      type: string;
+      context: string;
+    }>;
   };
 }
 

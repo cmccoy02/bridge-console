@@ -170,6 +170,8 @@ export async function processScan(scanId, repoUrl, repositoryId, db) {
     let tsFileCount = 0;
     let jsFileCount = 0;
     const largeFiles = [];
+    const todoItems = []; // Detailed TODO/FIXME locations
+    const consoleLogItems = []; // Detailed console.log locations
 
     for (const file of allFiles) {
         try {
@@ -190,14 +192,39 @@ export async function processScan(scanId, repoUrl, repositoryId, db) {
               largeFiles.push({ path: file, lines: lineCount });
             }
 
-            // TODO/FIXME detection
-            const todoMatches = content.match(/\/\/\s*(TODO|FIXME|XXX|HACK):/gi) || [];
-            todoCount += todoMatches.length;
+            // TODO/FIXME detection with line numbers
+            lines.forEach((line, idx) => {
+              const todoMatch = line.match(/\/\/\s*(TODO|FIXME|XXX|HACK):\s*(.*)$/i);
+              if (todoMatch) {
+                todoCount++;
+                if (todoItems.length < 100) { // Cap at 100 items to avoid huge payloads
+                  todoItems.push({
+                    file,
+                    line: idx + 1,
+                    type: todoMatch[1].toUpperCase(),
+                    text: todoMatch[2].trim().slice(0, 200), // Truncate long comments
+                    context: line.trim().slice(0, 150)
+                  });
+                }
+              }
+            });
 
-            // console.log detection (excluding test files)
+            // console.log detection with line numbers (excluding test files)
             if (!file.includes('.test.') && !file.includes('.spec.') && !file.includes('__tests__')) {
-              const consoleMatches = content.match(/console\.(log|warn|error|info|debug)\(/g) || [];
-              consoleLogCount += consoleMatches.length;
+              lines.forEach((line, idx) => {
+                const consoleMatch = line.match(/console\.(log|warn|error|info|debug)\(/);
+                if (consoleMatch) {
+                  consoleLogCount++;
+                  if (consoleLogItems.length < 100) { // Cap at 100 items
+                    consoleLogItems.push({
+                      file,
+                      line: idx + 1,
+                      type: consoleMatch[1],
+                      context: line.trim().slice(0, 150)
+                    });
+                  }
+                }
+              });
             }
         } catch (e) {}
     }
@@ -484,11 +511,13 @@ export async function processScan(scanId, repoUrl, repositoryId, db) {
             enhancedDependencies: enhancedDependencies.length > 0 ? enhancedDependencies : undefined,
             dependencyAnalysis: dependencyAnalysis || undefined
         },
-        // Code quality metrics
+        // Code quality metrics with detailed locations
         codeQuality: {
             todoCount,
             consoleLogCount,
-            deepDirectories
+            deepDirectories,
+            todoItems: todoItems.slice(0, 50), // Top 50 for UI display
+            consoleLogItems: consoleLogItems.slice(0, 50) // Top 50 for UI display
         }
         // Note: aiAnalysis removed - now using deterministic rule-based scoring
     };

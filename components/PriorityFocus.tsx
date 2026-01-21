@@ -135,16 +135,16 @@ function analyzeAndRecommend(metrics: BridgeMetrics): FocusRecommendation | null
   const recommendations: FocusRecommendation[] = [];
 
   // Check for deprecated packages (CRITICAL)
-  const deprecatedPkgs = issues.enhancedDependencies?.filter(d => d.deprecated) || [];
+  const deprecatedPkgs = issues.enhancedDependencies?.filter(d => d.isDeprecated) || [];
   if (deprecatedPkgs.length > 0) {
     recommendations.push({
       priority: 'critical',
       category: 'Security Risk',
       title: `Replace ${deprecatedPkgs.length} Deprecated Package${deprecatedPkgs.length > 1 ? 's' : ''}`,
-      reason: `Deprecated packages like "${deprecatedPkgs[0]?.name}" are no longer maintained and may contain unpatched security vulnerabilities. This is your highest priority fix.`,
+      reason: `Deprecated packages like "${deprecatedPkgs[0]?.package}" are no longer maintained and may contain unpatched security vulnerabilities. This is your highest priority fix.`,
       impact: 'Eliminates security vulnerabilities and ensures continued support',
       effort: deprecatedPkgs.length > 3 ? 'heavy' : 'medium',
-      nextStep: `Research alternatives for ${deprecatedPkgs[0]?.name} and plan the migration. Check the package's npm page for recommended replacements.`,
+      nextStep: `Research alternatives for ${deprecatedPkgs[0]?.package} and plan the migration. Check the package's npm page for recommended replacements.`,
       targetTab: 'packages'
     });
   }
@@ -152,17 +152,17 @@ function analyzeAndRecommend(metrics: BridgeMetrics): FocusRecommendation | null
   // Check for major version updates on core frameworks (HIGH)
   const majorUpdates = issues.enhancedDependencies?.filter(
     d => d.versionDistance?.major && d.versionDistance.major >= 2 &&
-    ['react', 'vue', 'angular', 'next', 'express', 'typescript'].some(fw => d.name.includes(fw))
+    ['react', 'vue', 'angular', 'next', 'express', 'typescript'].some(fw => d.package.includes(fw))
   ) || [];
   if (majorUpdates.length > 0) {
     recommendations.push({
       priority: 'high',
       category: 'Framework Debt',
-      title: `Upgrade ${majorUpdates[0].name} (${majorUpdates[0].versionDistance?.major} major versions behind)`,
+      title: `Upgrade ${majorUpdates[0].package} (${majorUpdates[0].versionDistance?.major} major versions behind)`,
       reason: `Your core framework is significantly outdated. Being ${majorUpdates[0].versionDistance?.major}+ major versions behind means you're missing important features, performance improvements, and security patches.`,
       impact: 'Unlock new features, better performance, and security updates',
       effort: 'heavy',
-      nextStep: `Review the ${majorUpdates[0].name} changelog for breaking changes. Consider creating a separate branch for the upgrade.`,
+      nextStep: `Review the ${majorUpdates[0].package} changelog for breaking changes. Consider creating a separate branch for the upgrade.`,
       targetTab: 'packages'
     });
   }

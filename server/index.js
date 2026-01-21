@@ -638,6 +638,86 @@ app.get('/api/cleanup-jobs/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// Delete stale branches
+app.post('/api/repositories/:id/branches/delete', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+    const { branches } = req.body;
+
+    if (!branches || !Array.isArray(branches) || branches.length === 0) {
+      return res.status(400).json({ error: 'branches array is required' });
+    }
+
+    // Get repository
+    const repo = await db.get(
+      'SELECT * FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    // Check for user access token
+    if (!req.user.accessToken) {
+      return res.status(400).json({
+        error: 'GitHub access token required. Please log in with GitHub (not demo mode) to delete branches.'
+      });
+    }
+
+    // Extract owner/repo from URL
+    const urlParts = repo.repoUrl.split('/');
+    const repoName = urlParts.pop().replace('.git', '');
+    const owner = urlParts.pop();
+
+    // Delete branches via GitHub API
+    const deleted = [];
+    const failed = [];
+
+    for (const branch of branches) {
+      try {
+        // Skip protected branches
+        if (branch === 'main' || branch === 'master' || branch === 'develop') {
+          failed.push({ branch, error: 'Protected branch' });
+          continue;
+        }
+
+        const response = await fetch(
+          `https://api.github.com/repos/${owner}/${repoName}/git/refs/heads/${encodeURIComponent(branch)}`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${req.user.accessToken}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'User-Agent': 'Bridge-Console'
+            }
+          }
+        );
+
+        if (response.ok || response.status === 204) {
+          deleted.push(branch);
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          failed.push({ branch, error: errorData.message || `HTTP ${response.status}` });
+        }
+      } catch (err) {
+        failed.push({ branch, error: err.message });
+      }
+    }
+
+    console.log(`[Bridge Server] Branch deletion: ${deleted.length} deleted, ${failed.length} failed`);
+
+    res.json({
+      deleted,
+      failed,
+      message: `Deleted ${deleted.length} of ${branches.length} branches`
+    });
+  } catch (error) {
+    console.error('[Bridge Server] Error deleting branches:', error);
+    res.status(500).json({ error: 'Failed to delete branches' });
+  }
+});
+
 // 5. Get specific scan by ID (for export)
 app.get('/api/scans/:id/export', async (req, res) => {
   try {

@@ -11,7 +11,12 @@ import AddRepositoryCard from './components/AddRepositoryCard';
 import { AuthProvider, useAuth } from './components/AuthProvider';
 import LoginScreen from './components/LoginScreen';
 import ScanHistory from './components/ScanHistory';
+import ScoreTrend from './components/ScoreTrend';
+import CodeIssues from './components/CodeIssues';
+import QuickActions from './components/QuickActions';
+import OrgOverview from './components/OrgOverview';
 import ScanProgress from './components/ScanProgress';
+import { sampleRepositories, sampleMetrics, sampleOrgStats } from './data/sampleData';
 import ErrorBoundary, { InlineError } from './components/ErrorBoundary';
 import ActionableTasks from './components/ActionableTasks';
 import WelcomeScreen from './components/WelcomeScreen';
@@ -68,7 +73,7 @@ interface Repository {
 
 // Wrapped App component with auth
 const AppContent: React.FC = () => {
-  const { user, logout, isLoading: authLoading, handleOAuthCallback } = useAuth();
+  const { user, logout, login, isLoading: authLoading, isPreviewMode, exitPreviewMode, handleOAuthCallback } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('repositories');
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
@@ -125,6 +130,14 @@ const AppContent: React.FC = () => {
   // Check backend connection and load repositories with retry
   // NOTE: This hook must be called unconditionally before any early returns
   useEffect(() => {
+    // Handle preview mode with sample data
+    if (isPreviewMode && !user) {
+      setRepositories(sampleRepositories as Repository[]);
+      setIsLoadingRepos(false);
+      setBackendConnected(true);
+      return;
+    }
+
     // Only run if user is authenticated
     if (!user || authLoading) return;
 
@@ -165,7 +178,7 @@ const AppContent: React.FC = () => {
       }
     };
     checkBackend();
-  }, [user, authLoading]);
+  }, [user, authLoading, isPreviewMode]);
 
   // Cleanup update poll on unmount
   useEffect(() => {
@@ -209,9 +222,13 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (!user) {
+  // Show login screen if not authenticated and not in preview mode
+  if (!user && !isPreviewMode) {
     return <LoginScreen />;
   }
+
+  // Use sample data in preview mode
+  const isPreview = isPreviewMode && !user;
 
   const loadRepositories = async () => {
     setIsLoadingRepos(true);
@@ -579,7 +596,13 @@ const AppContent: React.FC = () => {
     setSelectedRepo(repo);
     setViewMode('repository-detail');
     setActiveTab('overview');
-    
+
+    // In preview mode, use sample metrics
+    if (isPreview) {
+      setMetrics(sampleMetrics);
+      return;
+    }
+
     // Load existing scan data if available
     if (repo.lastScanData) {
       setMetrics(repo.lastScanData);
@@ -595,7 +618,10 @@ const AppContent: React.FC = () => {
     setRepoUrl('');
     setError(null);
     setCurrentScanId(null);
-    loadRepositories();
+    // Don't reload in preview mode
+    if (!isPreview) {
+      loadRepositories();
+    }
   };
 
   const exportCurrentScan = () => {
@@ -656,27 +682,40 @@ const AppContent: React.FC = () => {
           </div>
 
           <div className="hidden md:flex items-center gap-6 text-xs font-bold tracking-widest text-slate-500">
-             <div className="flex items-center gap-3">
-                {user.avatarUrl && (
-                  <img 
-                    src={user.avatarUrl} 
-                    alt={user.username}
-                    className="w-8 h-8 rounded-full border border-slate-700"
-                  />
-                )}
-                <span className="text-white">{user.username}</span>
-                {user.isDemo && (
-                  <span className="text-[10px] bg-yellow-900/30 text-yellow-500 px-2 py-0.5 rounded">DEMO</span>
-                )}
-             </div>
-             <button 
-               onClick={logout}
-               className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors group"
-               title="Sign out and switch GitHub account"
-             >
-               <LogOut size={14} />
-               <span className="hidden sm:inline">Sign Out</span>
-             </button>
+             {isPreview ? (
+               <>
+                 <span className="text-[10px] bg-apex-500/20 text-apex-500 px-3 py-1 rounded border border-apex-500/30">
+                   PREVIEW MODE
+                 </span>
+                 <button
+                   onClick={login}
+                   className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded font-bold hover:bg-gray-100 transition-colors"
+                 >
+                   Connect GitHub
+                 </button>
+               </>
+             ) : user ? (
+               <>
+                 <div className="flex items-center gap-3">
+                    {user.avatarUrl && (
+                      <img
+                        src={user.avatarUrl}
+                        alt={user.username}
+                        className="w-8 h-8 rounded-full border border-slate-700"
+                      />
+                    )}
+                    <span className="text-white">{user.username}</span>
+                 </div>
+                 <button
+                   onClick={logout}
+                   className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors group"
+                   title="Sign out and switch GitHub account"
+                 >
+                   <LogOut size={14} />
+                   <span className="hidden sm:inline">Sign Out</span>
+                 </button>
+               </>
+             ) : null}
           </div>
         </div>
       </header>
@@ -702,12 +741,22 @@ const AppContent: React.FC = () => {
               <>
                 <div className="mb-6">
                   <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase">
-                    {user?.username}'s Dashboard
+                    {isPreview ? 'Sample' : user?.username + "'s"} Dashboard
                   </h2>
                   <p className="text-slate-400 font-mono text-sm">
-                    Monitor technical debt across your repositories
+                    {isPreview
+                      ? 'Explore Bridge with sample data. Connect GitHub to see your repos.'
+                      : 'Monitor technical debt across your repositories'}
                   </p>
                 </div>
+
+                {/* Organization Overview - Shows aggregate stats when multiple repos */}
+                {!isLoadingRepos && repositories.length > 1 && (
+                  <OrgOverview
+                    repositories={repositories}
+                    onRepoClick={(repo) => selectRepository(repo)}
+                  />
+                )}
 
                 {/* Search and Filter Bar */}
                 {!isLoadingRepos && repositories.length > 0 && (
@@ -912,7 +961,7 @@ const AppContent: React.FC = () => {
                            }
                            await loadRepositories();
                          }}
-                         isDemo={user?.isDemo}
+                         isDemo={isPreview}
                        />
                      </div>
                    )}
@@ -1074,6 +1123,22 @@ const AppContent: React.FC = () => {
                  </div>
               </div>
 
+              {/* Preview Mode Banner */}
+              {isPreview && (
+                <div className="mb-6 p-4 bg-apex-500/10 border border-apex-500/30 rounded-lg flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-white">You're viewing sample data</div>
+                    <div className="text-xs text-slate-400">Connect your GitHub to analyze your own repositories</div>
+                  </div>
+                  <button
+                    onClick={login}
+                    className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded font-bold text-sm hover:bg-gray-100 transition-colors"
+                  >
+                    Connect GitHub
+                  </button>
+                </div>
+              )}
+
               {/* Tab Navigation */}
               <div className="flex gap-2 mb-6 border-b border-slate-800">
                  <TabButton 
@@ -1107,7 +1172,26 @@ const AppContent: React.FC = () => {
               </div>
 
               {/* Tab Content */}
-              {activeTab === 'overview' && <OverviewTab metrics={metrics} />}
+              {activeTab === 'overview' && (
+                <>
+                  <OverviewTab metrics={metrics} />
+                  {selectedRepo && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                      <ScoreTrend repositoryId={selectedRepo.id} />
+                      <QuickActions
+                        repositoryId={selectedRepo.id}
+                        repoUrl={selectedRepo.repoUrl}
+                        staleBranches={metrics.meta.staleBranches}
+                        unusedDependencies={metrics.issues.unusedDependencies}
+                        onUpdateClick={triggerUpdate}
+                        onCleanupClick={() => triggerCleanup(metrics.issues.unusedDependencies)}
+                        isUpdating={isUpdating}
+                        isCleaningUp={isCleaningUp}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
               {activeTab === 'packages' && (
                 <>
                   {/* Update Success Banner */}
@@ -1179,7 +1263,7 @@ const AppContent: React.FC = () => {
                   />
                 </>
               )}
-              {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
+              {activeTab === 'insights' && selectedRepo && <InsightsTab metrics={metrics} repoUrl={selectedRepo.repoUrl} />}
               {activeTab === 'automations' && selectedRepo && (
                 <AutomationsTab repositoryId={selectedRepo.id} />
               )}
@@ -1417,8 +1501,8 @@ const PackagesTab: React.FC<PackagesTabProps> = ({
    </div>
 );
 
-const InsightsTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => {
-   const { score } = metrics;
+const InsightsTab: React.FC<{ metrics: BridgeMetrics; repoUrl: string }> = ({ metrics, repoUrl }) => {
+   const { score, codeQuality } = metrics;
    const details = score.details;
    const tasks = score.tasks || [];
    const stats = score.stats;
@@ -1512,6 +1596,21 @@ const InsightsTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => {
                />
             </div>
          </DashboardCard>
+
+         {/* Code Quality Issues - TODOs and Console Logs */}
+         {codeQuality && (
+            <DashboardCard title="Code Quality Issues">
+               <div className="p-4">
+                  <CodeIssues
+                     todoItems={codeQuality.todoItems}
+                     consoleLogItems={codeQuality.consoleLogItems}
+                     todoCount={codeQuality.todoCount || 0}
+                     consoleLogCount={codeQuality.consoleLogCount || 0}
+                     repoUrl={repoUrl}
+                  />
+               </div>
+            </DashboardCard>
+         )}
       </div>
    );
 };
