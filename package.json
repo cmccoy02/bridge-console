@@ -9,11 +9,11 @@
   "scripts": {
     "dev": "concurrently \"npm run server\" \"vite\" \"wait-on http://localhost:3000 http://localhost:3001/api/health && electron .\" --names \"SERVER,VITE,ELECTRON\" --prefix-colors \"blue,magenta,green\"",
     "dev:web": "concurrently \"npm run server\" \"vite\" --names \"SERVER,VITE\" --prefix-colors \"blue,magenta\"",
-    "build": "tsc && vite build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder",
+    "build": "tsc && vite build && node build-electron.cjs",
     "build:web": "tsc && vite build",
-    "build:mac": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder --mac",
-    "build:win": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder --win",
-    "build:linux": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder --linux",
+    "build:mac": "tsc && vite build && node build-electron.cjs --mac",
+    "build:win": "tsc && vite build && node build-electron.cjs --win",
+    "build:linux": "tsc && vite build && node build-electron.cjs --linux",
     "preview": "vite preview",
     "server": "node server/index.js",
     "start": "electron .",
@@ -52,6 +52,7 @@
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "electron": "^40.0.0",
     "electron-builder": "^26.4.0",
     "postcss": "^8.4.31",
@@ -73,6 +74,9 @@
       "node_modules/sqlite3/**/*",
       "server/**/*"
     ],
+    "nodeGypRebuild": false,
+    "buildDependenciesFromSource": false,
+    "npmRebuild": true,
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -85,7 +89,14 @@
       "!**/tests/**",
       "!**/*.md",
       "!**/LICENSE*",
-      "!**/CHANGELOG*"
+      "!**/CHANGELOG*",
+      "!temp_scans/**",
+      "!temp_updates/**",
+      "!.git/**",
+      "!.vscode/**",
+      "!.cursor/**",
+      "!*.sqlite",
+      "!*.log"
     ],
     "extraResources": [
       {
@@ -98,10 +109,7 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": [
-        "dmg",
-        "zip"
-      ],
+      "target": "dir",
       "hardenedRuntime": true,
       "gatekeeperAssess": false
     },
