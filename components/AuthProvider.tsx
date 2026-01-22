@@ -1,9 +1,20 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && (window as any).bridge?.isElectron;
+
+// Electron bridge type
+interface ElectronBridge {
+  isElectron: boolean;
+  openExternal: (url: string) => Promise<void>;
+  getOAuthRedirectUri: () => Promise<string>;
+  onOAuthCallback: (callback: (data: { code: string }) => void) => () => void;
+  onOAuthError: (callback: (data: { error: string; description: string }) => void) => () => void;
+}
+
+const bridge: ElectronBridge | undefined = isElectron ? (window as any).bridge : undefined;
 
 export interface User {
   id: number;
@@ -44,6 +55,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     checkSession();
   }, []);
 
+  // Listen for OAuth callbacks from Electron
+  useEffect(() => {
+    if (!isElectron || !bridge) return;
+
+    // Listen for OAuth callback with auth code
+    const cleanupCallback = bridge.onOAuthCallback(async ({ code }) => {
+      console.log('[Auth] Received OAuth callback in Electron');
+      try {
+        await handleOAuthCallback(code);
+      } catch (error) {
+        console.error('[Auth] OAuth callback failed:', error);
+        alert('Failed to complete GitHub authentication. Please try again.');
+      }
+    });
+
+    // Listen for OAuth errors
+    const cleanupError = bridge.onOAuthError(({ error, description }) => {
+      console.error('[Auth] OAuth error:', error, description);
+      alert(`GitHub authentication failed: ${description || error}`);
+    });
+
+    return () => {
+      cleanupCallback();
+      cleanupError();
+    };
+  }, []);
+
   const checkSession = async () => {
     try {
       const res = await fetch(`${API_URL}/api/auth/me`, {
@@ -69,16 +107,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Exit preview mode when attempting login
       setIsPreviewMode(false);
 
-      const res = await fetch(`${API_URL}/api/auth/github`, {
+      // Build the auth request URL
+      let authEndpoint = `${API_URL}/api/auth/github`;
+
+      // For Electron, include the custom protocol redirect URI
+      if (isElectron && bridge) {
+        const redirectUri = await bridge.getOAuthRedirectUri();
+        authEndpoint += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
+      }
+
+      const res = await fetch(authEndpoint, {
         credentials: 'include'
       });
       const data = await res.json();
 
       if (data.authUrl) {
         // Redirect to GitHub
-        if (isElectron && (window as any).bridge?.openExternal) {
+        if (isElectron && bridge?.openExternal) {
           // In Electron, open in external browser
-          (window as any).bridge.openExternal(data.authUrl);
+          await bridge.openExternal(data.authUrl);
         } else {
           window.location.href = data.authUrl;
         }

@@ -13,6 +13,20 @@ contextBridge.exposeInMainWorld('bridge', {
   // Dialogs
   showError: (title, message) => ipcRenderer.invoke('show-error-dialog', title, message),
 
+  // OAuth
+  getOAuthRedirectUri: () => ipcRenderer.invoke('get-oauth-redirect-uri'),
+  onOAuthCallback: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('oauth-callback', handler);
+    // Return cleanup function
+    return () => ipcRenderer.removeListener('oauth-callback', handler);
+  },
+  onOAuthError: (callback) => {
+    const handler = (event, data) => callback(data);
+    ipcRenderer.on('oauth-error', handler);
+    return () => ipcRenderer.removeListener('oauth-error', handler);
+  },
+
   // Platform info
   platform: process.platform,
   isElectron: true,

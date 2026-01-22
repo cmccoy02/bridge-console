@@ -10,6 +10,7 @@ import depcheck from 'depcheck';
 import { getRepoMetadata } from './github.js';
 import { analyzeAndPrioritize } from './prioritization.js';
 import { calculateTechDebtScore } from './scoring.js';
+import { analyzeMultiLanguagePackages, detectPackageManagers } from './package-detection.js';
 
 const execPromise = util.promisify(exec);
 
@@ -360,6 +361,30 @@ export async function processScan(scanId, repoUrl, repositoryId, db) {
         console.warn('[Worker] NCU analysis failed:', e.message);
     }
 
+    // E-2. Multi-Language Package Detection (Python, Ruby, Elixir, Rust, Go)
+    let multiLanguagePackages = null;
+    try {
+        console.log('[Worker] Checking for non-JavaScript package managers...');
+        multiLanguagePackages = await analyzeMultiLanguagePackages(TEMP_DIR);
+
+        if (multiLanguagePackages.summary.languages.length > 0) {
+            console.log(`[Worker] Found ${multiLanguagePackages.summary.languages.join(', ')} packages`);
+            // Merge non-JS outdated packages into the main list
+            for (const pkg of multiLanguagePackages.allOutdated) {
+                outdatedDependencies.push({
+                    package: pkg.package,
+                    current: pkg.current,
+                    latest: pkg.latest,
+                    severity: pkg.severity,
+                    language: pkg.language,
+                    packageManager: pkg.packageManager
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('[Worker] Multi-language package detection failed:', e.message);
+    }
+
     // E. Depcheck (Unused & Missing Dependencies)
     console.log('[Worker] Running Depcheck analysis...');
     let unusedDependencies = [];
@@ -509,7 +534,9 @@ export async function processScan(scanId, repoUrl, repositoryId, db) {
             outdatedDependencies,
             // Enhanced dependency analysis
             enhancedDependencies: enhancedDependencies.length > 0 ? enhancedDependencies : undefined,
-            dependencyAnalysis: dependencyAnalysis || undefined
+            dependencyAnalysis: dependencyAnalysis || undefined,
+            // Multi-language package info
+            multiLanguagePackages: multiLanguagePackages?.summary?.languages?.length > 0 ? multiLanguagePackages : undefined
         },
         // Code quality metrics with detailed locations
         codeQuality: {

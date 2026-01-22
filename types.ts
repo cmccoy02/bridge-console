@@ -229,11 +229,16 @@ export interface BridgeMetrics {
       current: string;
       latest: string;
       severity: 'Low' | 'Medium' | 'High';
+      language?: string;  // e.g., 'JavaScript', 'Python', 'Ruby', 'Elixir'
+      packageManager?: string;  // e.g., 'npm', 'pip', 'bundler', 'mix'
     }>;
 
     // Enhanced dependency analysis
     enhancedDependencies?: EnhancedOutdatedDependency[];
     dependencyAnalysis?: DependencyAnalysisSummary;
+
+    // Multi-language package analysis
+    multiLanguagePackages?: MultiLanguagePackageAnalysis;
   };
   aiAnalysis?: {
     score: number;
@@ -274,6 +279,46 @@ export interface BridgeMetrics {
       type: string;
       context: string;
     }>;
+  };
+}
+
+// Multi-language package detection types
+export interface MultiLanguagePackageAnalysis {
+  packageManagers: Array<{
+    name: string;
+    language: string;
+  }>;
+  byLanguage: Record<string, {
+    packageManager: string;
+    dependencies: Array<{
+      name: string;
+      currentVersion: string;
+      constraint: string;
+    }>;
+    outdated: Array<{
+      package: string;
+      current: string;
+      latest: string;
+      severity: 'Low' | 'Medium' | 'High';
+      language: string;
+      packageManager: string;
+    }>;
+    totalPackages: number;
+    outdatedCount: number;
+    error?: string;
+  }>;
+  allOutdated: Array<{
+    package: string;
+    current: string;
+    latest: string;
+    severity: 'Low' | 'Medium' | 'High';
+    language: string;
+    packageManager: string;
+  }>;
+  summary: {
+    totalPackages: number;
+    totalOutdated: number;
+    languages: string[];
   };
 }
 

@@ -59,6 +59,70 @@ const CategoryBadge: React.FC<{ category: string }> = ({ category }) => {
   );
 };
 
+const LanguageBadge: React.FC<{ language?: string; packageManager?: string }> = ({ language, packageManager }) => {
+  if (!language || language === 'JavaScript') return null;
+
+  const styles: Record<string, string> = {
+    'Python': 'bg-blue-950/30 text-blue-400 border-blue-800',
+    'Ruby': 'bg-red-950/30 text-red-400 border-red-800',
+    'Elixir': 'bg-purple-950/30 text-purple-400 border-purple-800',
+    'Rust': 'bg-orange-950/30 text-orange-400 border-orange-800',
+    'Go': 'bg-cyan-950/30 text-cyan-400 border-cyan-800'
+  };
+
+  const icons: Record<string, string> = {
+    'Python': '🐍',
+    'Ruby': '💎',
+    'Elixir': '💧',
+    'Rust': '🦀',
+    'Go': '🐹'
+  };
+
+  return (
+    <span className={`px-1 py-0.5 text-[9px] font-medium uppercase border rounded flex items-center gap-0.5 ${styles[language] || 'bg-slate-800/50 text-slate-500 border-slate-700'}`}>
+      <span className="text-[8px]">{icons[language]}</span>
+      {packageManager || language}
+    </span>
+  );
+};
+
+// Get package registry URL based on language
+const getPackageUrl = (pkgName: string, language?: string, packageManager?: string): string => {
+  if (!language || language === 'JavaScript') {
+    return `https://www.npmjs.com/package/${pkgName}`;
+  }
+
+  switch (language) {
+    case 'Python':
+      return `https://pypi.org/project/${pkgName}`;
+    case 'Ruby':
+      return `https://rubygems.org/gems/${pkgName}`;
+    case 'Elixir':
+      return `https://hex.pm/packages/${pkgName}`;
+    case 'Rust':
+      return `https://crates.io/crates/${pkgName}`;
+    case 'Go':
+      return `https://pkg.go.dev/${pkgName}`;
+    default:
+      return `https://www.npmjs.com/package/${pkgName}`;
+  }
+};
+
+// Get registry label based on language
+const getRegistryLabel = (language?: string): string => {
+  if (!language || language === 'JavaScript') return 'npm';
+
+  const labels: Record<string, string> = {
+    'Python': 'PyPI',
+    'Ruby': 'RubyGems',
+    'Elixir': 'Hex',
+    'Rust': 'Crates.io',
+    'Go': 'pkg.go.dev'
+  };
+
+  return labels[language] || 'npm';
+};
+
 const VersionDistance: React.FC<{ distance: EnhancedOutdatedDependency['versionDistance'] }> = ({ distance }) => {
   const { major, minor, patch } = distance;
 
@@ -404,7 +468,10 @@ const TriageList: React.FC<TriageListProps> = ({ outdated, enhanced, analysis })
           {sorted.map((pkg, idx) => (
             <tr key={idx} className="hover:bg-slate-800/30 transition-colors group">
               <td className="p-2 text-white font-bold">
-                {pkg.package}
+                <div className="flex items-center gap-2">
+                  {pkg.package}
+                  <LanguageBadge language={pkg.language} packageManager={pkg.packageManager} />
+                </div>
               </td>
               <td className="p-2 text-slate-400">
                 <div className="flex flex-col">

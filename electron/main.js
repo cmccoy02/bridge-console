@@ -7,6 +7,19 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Custom protocol for OAuth callback
+const PROTOCOL = 'bridge';
+const PROTOCOL_PREFIX = `${PROTOCOL}://`;
+
+// Register as default protocol handler
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(PROTOCOL);
+}
+
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (process.platform === 'win32') {
   app.setAppUserModelId(app.getName());
@@ -336,9 +349,46 @@ function createMenu() {
   Menu.setApplicationMenu(menu);
 }
 
+// Handle OAuth callback URL
+function handleOAuthCallback(url) {
+  if (!url || !url.startsWith(PROTOCOL_PREFIX)) return;
+
+  console.log('[Bridge] Received OAuth callback:', url);
+
+  // Parse the URL to extract the auth code
+  try {
+    // URL format: bridge://auth/callback?code=xxx
+    const urlObj = new URL(url);
+    const code = urlObj.searchParams.get('code');
+    const error = urlObj.searchParams.get('error');
+    const errorDescription = urlObj.searchParams.get('error_description');
+
+    if (mainWindow) {
+      if (error) {
+        console.error('[Bridge] OAuth error:', error, errorDescription);
+        mainWindow.webContents.send('oauth-error', { error, description: errorDescription });
+      } else if (code) {
+        console.log('[Bridge] Sending OAuth code to renderer');
+        mainWindow.webContents.send('oauth-callback', { code });
+      }
+
+      // Bring the window to front
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  } catch (err) {
+    console.error('[Bridge] Failed to parse OAuth callback URL:', err);
+  }
+}
+
 // IPC Handlers
 ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('get-app-paths', () => getAppPaths());
+
+// Get the OAuth redirect URI for Electron
+ipcMain.handle('get-oauth-redirect-uri', () => {
+  return `${PROTOCOL}://auth/callback`;
+});
 
 ipcMain.handle('open-external', (event, url) => {
   shell.openExternal(url);
@@ -352,11 +402,44 @@ ipcMain.handle('show-error-dialog', (event, title, message) => {
   dialog.showErrorBox(title, message);
 });
 
+// Handle protocol URL on macOS (when app is already running)
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  handleOAuthCallback(url);
+});
+
+// Handle protocol URL on Windows/Linux (second instance)
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine, workingDirectory) => {
+    // Someone tried to run a second instance, we should focus our window
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+
+    // Handle the protocol URL on Windows
+    const url = commandLine.find(arg => arg.startsWith(PROTOCOL_PREFIX));
+    if (url) {
+      handleOAuthCallback(url);
+    }
+  });
+}
+
 // App lifecycle
 app.whenReady().then(async () => {
   console.log('[Bridge] App starting...');
   console.log('[Bridge] Is Development:', isDev);
   console.log('[Bridge] Is Packaged:', app.isPackaged);
+
+  // Check if opened via protocol URL (Windows/Linux on first launch)
+  const protocolUrl = process.argv.find(arg => arg.startsWith(PROTOCOL_PREFIX));
+  if (protocolUrl) {
+    // Will handle after window is created
+    setTimeout(() => handleOAuthCallback(protocolUrl), 1000);
+  }
 
   // Set up environment
   setupServerEnvironment();

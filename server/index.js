@@ -42,21 +42,22 @@ app.get('/api/health', (req, res) => {
 // GitHub OAuth - Get auth URL
 app.get('/api/auth/github', (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID;
-  
+
   if (!clientId) {
     // Demo mode - return mock user
-    return res.json({ 
+    return res.json({
       demoMode: true,
       message: 'GitHub OAuth not configured. Using demo mode.'
     });
   }
-  
-  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+
+  // Allow Electron to pass a custom redirect URI (e.g., bridge://auth/callback)
+  const redirectUri = req.query.redirect_uri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/callback';
   // Scopes: repo (access repos), read:user (read user data), read:org (read org membership), user:email (read email)
   const scope = 'repo read:user read:org user:email';
 
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
-  
+
   res.json({ authUrl });
 });
 
