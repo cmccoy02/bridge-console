@@ -8,6 +8,14 @@ import { processUpdate } from './update-worker.js';
 import { processCleanup } from './cleanup-worker.js';
 import { generateJWT, setAuthCookie, clearAuthCookie, authMiddleware } from './auth.js';
 import { getUserRepos, getUserOrgs, getOrgRepos } from './github.js';
+import {
+  isSecurityAgentAvailable,
+  runSecurityScan,
+  generateAIFix,
+  getSupportedLanguages,
+  getSeverityColor,
+  getSeverityBadgeClass,
+} from './security-scanner.js';
 
 dotenv.config();
 
@@ -15,7 +23,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({
-  origin: [ 'http://localhost:3000'],
+  origin: ['http://localhost:3000', 'http://localhost:5173'],
   credentials: true
 }));
 app.use(express.json());
@@ -1256,6 +1264,308 @@ app.put('/api/repositories/:id/automation-settings', authMiddleware, async (req,
     res.status(500).json({ error: 'Failed to save automation settings' });
   }
 });
+
+// ===== SECURITY SCANNER ENDPOINTS =====
+
+// Check if security scanner is available
+app.get('/api/security/status', async (req, res) => {
+  try {
+    const available = await isSecurityAgentAvailable();
+    res.json({
+      available,
+      hasGeminiKey: !!process.env.GEMINI_API_KEY,
+      supportedLanguages: getSupportedLanguages()
+    });
+  } catch (error) {
+    console.error('[Security Scanner] Error checking status:', error);
+    res.status(500).json({ error: 'Failed to check security scanner status' });
+  }
+});
+
+// Start a security scan for a repository
+app.post('/api/security/scan', authMiddleware, async (req, res) => {
+  try {
+    const { repositoryId, generateFixes = false } = req.body;
+
+    if (!repositoryId) {
+      return res.status(400).json({ error: 'repositoryId is required' });
+    }
+
+    const db = await getDb();
+
+    // Verify user owns this repository
+    const repo = await db.get(
+      'SELECT * FROM repositories WHERE id = ? AND "userId" = ?',
+      [repositoryId, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    // Check if security scanner is available
+    const available = await isSecurityAgentAvailable();
+    if (!available) {
+      return res.status(503).json({
+        error: 'Security scanner not available. Ensure Python 3 is installed.'
+      });
+    }
+
+    // Create security scan entry
+    const result = await db.run(
+      `INSERT INTO security_scans ("repositoryId", "repoUrl", status, "generateFixes")
+       VALUES (?, ?, 'pending', ?)`,
+      [repositoryId, repo.repoUrl, generateFixes ? 1 : 0]
+    );
+
+    const scanId = result.lastID;
+    console.log(`[Security Scanner] Created scan ${scanId} for ${repo.name}`);
+
+    // Start async security scan (fire and forget)
+    processSecurityScan(scanId, repo, generateFixes, db).catch(err => {
+      console.error('[Security Scanner] Scan error:', err);
+    });
+
+    res.json({
+      scanId,
+      repositoryId,
+      status: 'pending',
+      message: 'Security scan started'
+    });
+  } catch (error) {
+    console.error('[Security Scanner] Error starting scan:', error);
+    res.status(500).json({ error: 'Failed to start security scan' });
+  }
+});
+
+// Get security scan status
+app.get('/api/security/scan/:id', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Get scan with repository info
+    const scan = await db.get(
+      `SELECT ss.*, r.name as "repoName", r."repoUrl"
+       FROM security_scans ss
+       JOIN repositories r ON ss."repositoryId" = r.id
+       WHERE ss.id = ? AND r."userId" = ?`,
+      [req.params.id, req.user.id]
+    );
+
+    if (!scan) {
+      return res.status(404).json({ error: 'Security scan not found' });
+    }
+
+    // Parse JSON fields
+    const progress = scan.progress
+      ? (typeof scan.progress === 'string' ? JSON.parse(scan.progress) : scan.progress)
+      : null;
+    const results = scan.results
+      ? (typeof scan.results === 'string' ? JSON.parse(scan.results) : scan.results)
+      : null;
+
+    res.json({
+      id: scan.id,
+      repositoryId: scan.repositoryId,
+      repoName: scan.repoName,
+      repoUrl: scan.repoUrl,
+      status: scan.status,
+      progress,
+      results,
+      generateFixes: !!scan.generateFixes,
+      startedAt: scan.startedAt,
+      completedAt: scan.completedAt,
+      createdAt: scan.createdAt
+    });
+  } catch (error) {
+    console.error('[Security Scanner] Error fetching scan:', error);
+    res.status(500).json({ error: 'Failed to fetch security scan' });
+  }
+});
+
+// Get security scan history for a repository
+app.get('/api/repositories/:id/security-history', authMiddleware, async (req, res) => {
+  try {
+    const db = await getDb();
+
+    // Verify ownership
+    const repo = await db.get(
+      'SELECT id FROM repositories WHERE id = ? AND "userId" = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (!repo) {
+      return res.status(404).json({ error: 'Repository not found' });
+    }
+
+    const scans = await db.all(
+      `SELECT id, status, results, "createdAt", "completedAt"
+       FROM security_scans
+       WHERE "repositoryId" = ?
+       ORDER BY "createdAt" DESC
+       LIMIT 10`,
+      [req.params.id]
+    );
+
+    res.json(scans.map(scan => {
+      const results = scan.results
+        ? (typeof scan.results === 'string' ? JSON.parse(scan.results) : scan.results)
+        : null;
+
+      return {
+        id: scan.id,
+        status: scan.status,
+        createdAt: scan.createdAt,
+        completedAt: scan.completedAt,
+        summary: results ? {
+          totalFindings: results.stats?.total_findings || 0,
+          critical: results.stats?.critical || 0,
+          high: results.stats?.high || 0,
+          medium: results.stats?.medium || 0,
+          low: results.stats?.low || 0,
+          languages: results.languages || []
+        } : null
+      };
+    }));
+  } catch (error) {
+    console.error('[Security Scanner] Error fetching history:', error);
+    res.status(500).json({ error: 'Failed to fetch security scan history' });
+  }
+});
+
+// Generate AI fix for a specific finding
+app.post('/api/security/fix', authMiddleware, async (req, res) => {
+  try {
+    const { finding } = req.body;
+
+    if (!finding) {
+      return res.status(400).json({ error: 'finding object is required' });
+    }
+
+    // Check for Gemini API key
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({
+        error: 'AI fix generation requires GEMINI_API_KEY to be configured'
+      });
+    }
+
+    console.log(`[Security Scanner] Generating AI fix for ${finding.issue} in ${finding.file}`);
+
+    const fix = await generateAIFix(finding);
+
+    res.json(fix);
+  } catch (error) {
+    console.error('[Security Scanner] Error generating fix:', error);
+    res.status(500).json({ error: 'Failed to generate AI fix' });
+  }
+});
+
+// Get severity styling helpers
+app.get('/api/security/helpers', (req, res) => {
+  res.json({
+    severityColors: {
+      critical: getSeverityColor('critical'),
+      high: getSeverityColor('high'),
+      medium: getSeverityColor('medium'),
+      low: getSeverityColor('low')
+    },
+    severityBadgeClasses: {
+      critical: getSeverityBadgeClass('critical'),
+      high: getSeverityBadgeClass('high'),
+      medium: getSeverityBadgeClass('medium'),
+      low: getSeverityBadgeClass('low')
+    },
+    supportedLanguages: getSupportedLanguages()
+  });
+});
+
+// Security scan worker function
+async function processSecurityScan(scanId, repo, generateFixes, db) {
+  console.log(`[Security Scanner] Starting scan ${scanId} for ${repo.name}`);
+
+  try {
+    // Update status to processing
+    await db.run(
+      `UPDATE security_scans SET status = 'processing', "startedAt" = CURRENT_TIMESTAMP WHERE id = ?`,
+      [scanId]
+    );
+
+    // Clone repository to temp directory
+    const os = await import('os');
+    const path = await import('path');
+    const fs = await import('fs');
+    const { simpleGit } = await import('simple-git');
+
+    const tempDir = path.join(os.tmpdir(), `bridge-security-${scanId}`);
+
+    // Clean up if exists
+    if (fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+
+    // Update progress
+    await db.run(
+      `UPDATE security_scans SET progress = ? WHERE id = ?`,
+      [JSON.stringify({ step: 'cloning', percent: 10, message: 'Cloning repository...' }), scanId]
+    );
+
+    // Clone the repository
+    const git = simpleGit();
+    await git.clone(repo.repoUrl, tempDir, ['--depth', '1']);
+
+    // Update progress
+    await db.run(
+      `UPDATE security_scans SET progress = ? WHERE id = ?`,
+      [JSON.stringify({ step: 'scanning', percent: 30, message: 'Running security scan...' }), scanId]
+    );
+
+    // Run the security scan
+    const progressCallback = async (step, percent, message) => {
+      await db.run(
+        `UPDATE security_scans SET progress = ? WHERE id = ?`,
+        [JSON.stringify({ step, percent: Math.min(90, 30 + (percent * 0.6)), message }), scanId]
+      );
+    };
+
+    const results = await runSecurityScan(tempDir, { generateFixes }, progressCallback);
+
+    // Update with final results
+    await db.run(
+      `UPDATE security_scans SET
+        status = 'completed',
+        progress = ?,
+        results = ?,
+        "completedAt" = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [
+        JSON.stringify({ step: 'complete', percent: 100, message: 'Scan complete' }),
+        JSON.stringify(results),
+        scanId
+      ]
+    );
+
+    // Clean up temp directory
+    try {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    } catch (e) {
+      console.warn('[Security Scanner] Failed to clean up temp directory:', e);
+    }
+
+    console.log(`[Security Scanner] Scan ${scanId} completed - found ${results.stats?.total_findings || 0} findings`);
+
+  } catch (error) {
+    console.error(`[Security Scanner] Scan ${scanId} failed:`, error);
+
+    await db.run(
+      `UPDATE security_scans SET
+        status = 'failed',
+        progress = ?,
+        "completedAt" = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [JSON.stringify({ step: 'error', percent: 0, message: error.message }), scanId]
+    );
+  }
+}
 
 // Catch-all for 404s - BEFORE error handler
 app.use('/api/*', (req, res) => {

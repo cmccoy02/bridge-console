@@ -21,6 +21,8 @@ import ErrorBoundary, { InlineError } from './components/ErrorBoundary';
 import ActionableTasks from './components/ActionableTasks';
 import WelcomeScreen from './components/WelcomeScreen';
 import ConnectionError from './components/ConnectionError';
+import SecurityFindings from './components/SecurityFindings';
+import PriorityFocus from './components/PriorityFocus';
 import { validateGitHubUrl, type ValidationResult } from './utils/validation';
 import mockData from './mock-bridge-metrics.json';
 import {
@@ -56,7 +58,7 @@ import GitHubBrowser from './components/GitHubBrowser';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabType = 'overview' | 'packages' | 'insights' | 'automations';
+type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
 type AddRepoMode = 'url' | 'browse';
 
@@ -1148,12 +1150,19 @@ const AppContent: React.FC = () => {
                     label="Overview"
                     badge={metrics.score.total}
                  />
-                 <TabButton 
-                    active={activeTab === 'packages'} 
+                 <TabButton
+                    active={activeTab === 'packages'}
                     onClick={() => setActiveTab('packages')}
                     icon={<Package size={16} />}
                     label="Packages"
                     badge={metrics.issues.outdatedDependencies.length + metrics.issues.unusedDependencies.length}
+                 />
+                 <TabButton
+                    active={activeTab === 'security'}
+                    onClick={() => setActiveTab('security')}
+                    icon={<ShieldAlert size={16} />}
+                    label="Security"
+                    badge={0}
                  />
                  <TabButton
                     active={activeTab === 'insights'}
@@ -1264,6 +1273,13 @@ const AppContent: React.FC = () => {
                 </>
               )}
               {activeTab === 'insights' && selectedRepo && <InsightsTab metrics={metrics} repoUrl={selectedRepo.repoUrl} />}
+              {activeTab === 'security' && selectedRepo && (
+                <SecurityFindings
+                  repositoryId={selectedRepo.id}
+                  repoUrl={selectedRepo.repoUrl}
+                  defaultBranch="main"
+                />
+              )}
               {activeTab === 'automations' && selectedRepo && (
                 <AutomationsTab repositoryId={selectedRepo.id} />
               )}
@@ -1380,6 +1396,9 @@ const OverviewTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => (
       </div>
 
       <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
+         {/* Priority Focus - The #1 thing to fix */}
+         <PriorityFocus metrics={metrics} />
+
          <DashboardCard title="Critical Issues">
             <div className="space-y-4">
                <AnomalyRow icon={<Activity size={16} />} label="Circular Dependencies" value={metrics.issues.circularDependencies.length} danger={metrics.issues.circularDependencies.length > 0} />

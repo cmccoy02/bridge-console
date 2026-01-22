@@ -230,6 +230,23 @@ export async function getDb() {
       )
     `);
 
+    // Security scans table for code vulnerability analysis
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS security_scans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repositoryId INTEGER NOT NULL,
+        repoUrl TEXT,
+        status TEXT DEFAULT 'pending',
+        generateFixes INTEGER DEFAULT 0,
+        progress JSON,
+        results JSON,
+        startedAt DATETIME,
+        completedAt DATETIME,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id)
+      )
+    `);
+
     console.log('[DB] SQLite initialized');
     return sqliteDb;
   }
@@ -393,6 +410,22 @@ export async function getDb() {
     )
   `);
 
+  // Security scans table for code vulnerability analysis
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS security_scans (
+      id SERIAL PRIMARY KEY,
+      "repositoryId" INTEGER NOT NULL REFERENCES repositories(id),
+      "repoUrl" TEXT,
+      status TEXT DEFAULT 'pending',
+      "generateFixes" INTEGER DEFAULT 0,
+      progress JSONB,
+      results JSONB,
+      "startedAt" TIMESTAMP,
+      "completedAt" TIMESTAMP,
+      "createdAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
   // Create indexes for performance
   try {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_scans_repository ON scans("repositoryId")`);
@@ -403,6 +436,8 @@ export async function getDb() {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_agent_runs_repo ON agent_runs("repositoryId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_update_jobs_repo ON update_jobs("repositoryId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_update_jobs_user ON update_jobs("userId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_security_scans_repo ON security_scans("repositoryId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_security_scans_status ON security_scans(status)`);
   } catch (e) {
     // Indexes might already exist, that's fine
   }
