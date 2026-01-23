@@ -90,10 +90,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (res.ok) {
         const userData = await res.json();
-        // Only set user if they have a real GitHub account (not demo)
-        if (userData.githubId && userData.githubId !== 'demo-user') {
-          setUser(userData);
-        }
+        console.log('[Auth] Session found:', userData.username);
+        setUser(userData);
+      } else {
+        console.log('[Auth] No active session');
       }
     } catch (error) {
       console.error('Session check error:', error);
@@ -107,7 +107,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Exit preview mode when attempting login
       setIsPreviewMode(false);
 
-      const res = await fetch(`${API_URL}/api/auth/github`, {
+      // Tell server whether we're in Electron or Web
+      // This determines where the OAuth callback redirects to
+      const platform = isElectron ? 'electron' : 'web';
+      
+      const res = await fetch(`${API_URL}/api/auth/github?platform=${platform}`, {
         credentials: 'include'
       });
       const data = await res.json();
@@ -116,8 +120,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Redirect to GitHub
         if (isElectron && bridge?.openExternal) {
           // In Electron, open in external browser
+          // After auth, GitHub redirects to server, which redirects to bridge://
+          // Electron intercepts bridge:// and calls handleOAuthCallback
+          console.log('[Auth] Opening GitHub auth in external browser (Electron mode)');
           await bridge.openExternal(data.authUrl);
         } else {
+          // In web, just redirect - callback will set cookie and redirect back
+          console.log('[Auth] Redirecting to GitHub auth (Web mode)');
           window.location.href = data.authUrl;
         }
       } else if (data.error) {
