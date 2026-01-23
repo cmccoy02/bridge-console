@@ -475,11 +475,19 @@ app.post('/api/repositories', authMiddleware, async (req, res) => {
     const existing = await db.get('SELECT * FROM repositories WHERE "repoUrl" = ? AND "userId" = ?', [repoUrl, req.user.id]);
 
     if (existing) {
-      console.warn('[Bridge Server] Repository already exists:', repoUrl);
+      // If it's inactive (disconnected), reactivate it
+      if (existing.isActive === 0) {
+        console.log('[Bridge Server] Reactivating previously disconnected repository:', repoUrl);
+        await db.run('UPDATE repositories SET "isActive" = 1 WHERE id = ?', [existing.id]);
+        res.json({ id: existing.id, name: existing.name, owner: existing.owner, repoUrl, reconnected: true });
+        return;
+      }
+      // If it's already active, error
+      console.warn('[Bridge Server] Repository already connected:', repoUrl);
       return res.status(400).json({ error: 'Repository already connected' });
     }
 
-    // Create repository entry with userId
+    // Create new repository entry with userId
     const result = await db.run(
       'INSERT INTO repositories ("repoUrl", name, owner, "userId") VALUES (?, ?, ?, ?)',
       [repoUrl, name, owner, req.user.id]
