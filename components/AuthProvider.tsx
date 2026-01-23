@@ -107,16 +107,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       // Exit preview mode when attempting login
       setIsPreviewMode(false);
 
-      // Build the auth request URL
-      let authEndpoint = `${API_URL}/api/auth/github`;
-
-      // For Electron, include the custom protocol redirect URI
-      if (isElectron && bridge) {
-        const redirectUri = await bridge.getOAuthRedirectUri();
-        authEndpoint += `?redirect_uri=${encodeURIComponent(redirectUri)}`;
-      }
-
-      const res = await fetch(authEndpoint, {
+      const res = await fetch(`${API_URL}/api/auth/github`, {
         credentials: 'include'
       });
       const data = await res.json();
@@ -131,7 +122,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } else if (data.error) {
         console.error('Login error:', data.error);
-        alert('GitHub OAuth not configured. Please set up GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.');
+        alert(data.message || 'GitHub OAuth not configured. Please set up GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.');
       }
     } catch (error) {
       console.error('Login error:', error);

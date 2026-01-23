@@ -52,21 +52,116 @@ app.get('/api/auth/github', (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID;
 
   if (!clientId) {
-    // Demo mode - return mock user
     return res.json({
-      demoMode: true,
-      message: 'GitHub OAuth not configured. Using demo mode.'
+      error: 'GitHub OAuth not configured',
+      message: 'Please set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET in your .env file'
     });
   }
 
-  // Allow Electron to pass a custom redirect URI (e.g., bridge://auth/callback)
-  const redirectUri = req.query.redirect_uri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+  // IMPORTANT: redirect_uri MUST match what's registered in the GitHub App
+  // For local development, this is the electron-callback endpoint which then
+  // redirects to the bridge:// protocol for Electron, or returns HTML for web
+  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3001/api/auth/electron-callback';
+  
   // Scopes: repo (access repos), read:user (read user data), read:org (read org membership), user:email (read email)
   const scope = 'repo read:user read:org user:email';
 
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
 
+  console.log('[Auth] Generated auth URL with redirect:', redirectUri);
   res.json({ authUrl });
+});
+
+// GitHub OAuth - GET callback (handles both Electron and web)
+app.get('/api/auth/electron-callback', async (req, res) => {
+  const { code, error, error_description } = req.query;
+  const userAgent = req.headers['user-agent'] || '';
+  const isElectron = userAgent.includes('Electron');
+
+  console.log('[Auth] OAuth callback received, isElectron:', isElectron, 'code:', !!code);
+
+  if (error) {
+    if (isElectron) {
+      // Redirect to bridge:// with error
+      return res.redirect(`bridge://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(error_description || '')}`);
+    }
+    // For web, redirect to frontend with error
+    return res.redirect(`http://localhost:3000?auth_error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(error_description || '')}`);
+  }
+
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
+  }
+
+  // For Electron, redirect to bridge:// protocol
+  if (isElectron) {
+    return res.redirect(`bridge://auth/callback?code=${encodeURIComponent(code)}`);
+  }
+
+  // For web browsers, exchange the code and set cookie directly, then redirect
+  try {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+
+    // Exchange code for token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error) {
+      return res.redirect(`http://localhost:3000?auth_error=${encodeURIComponent(tokenData.error_description || tokenData.error)}`);
+    }
+
+    // Get user info from GitHub
+    const userResponse = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+
+    const githubUser = await userResponse.json();
+
+    // Save or update user in database
+    const db = await getDb();
+    let user = await db.get('SELECT * FROM users WHERE "githubId" = ?', [String(githubUser.id)]);
+
+    if (user) {
+      await db.run(
+        'UPDATE users SET username = ?, email = ?, "avatarUrl" = ?, "accessToken" = ? WHERE id = ?',
+        [githubUser.login, githubUser.email || '', githubUser.avatar_url, tokenData.access_token, user.id]
+      );
+      user = await db.get('SELECT * FROM users WHERE id = ?', [user.id]);
+    } else {
+      const result = await db.run(
+        'INSERT INTO users (username, email, "avatarUrl", "githubId", "accessToken") VALUES (?, ?, ?, ?, ?)',
+        [githubUser.login, githubUser.email || '', githubUser.avatar_url, String(githubUser.id), tokenData.access_token]
+      );
+      user = await db.get('SELECT * FROM users WHERE id = ?', [result.lastID]);
+    }
+
+    // Set auth cookie
+    const token = generateJWT(user.id);
+    setAuthCookie(res, token);
+
+    // Redirect to frontend
+    console.log('[Auth] Web OAuth complete, redirecting to frontend');
+    res.redirect('http://localhost:3000');
+  } catch (error) {
+    console.error('[Auth] Web OAuth error:', error);
+    res.redirect(`http://localhost:3000?auth_error=${encodeURIComponent('Authentication failed')}`);
+  }
 });
 
 // GitHub OAuth - Handle callback

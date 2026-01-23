@@ -112,10 +112,20 @@ const AppContent: React.FC = () => {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ prUrl?: string; message?: string; error?: string } | null>(null);
 
-  // Handle OAuth callback
+  // Handle OAuth callback and errors
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
+    const authError = urlParams.get('auth_error');
+    const errorDescription = urlParams.get('error_description');
+
+    if (authError) {
+      console.error('OAuth error:', authError, errorDescription);
+      setError(errorDescription || authError || 'Authentication failed');
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
     if (code) {
       handleOAuthCallback(code)
         .then(() => {
@@ -124,6 +134,7 @@ const AppContent: React.FC = () => {
         })
         .catch((err) => {
           console.error('OAuth callback failed:', err);
+          setError('OAuth callback failed. Please try again.');
           window.history.replaceState({}, '', window.location.pathname);
         });
     }

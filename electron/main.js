@@ -386,8 +386,9 @@ ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('get-app-paths', () => getAppPaths());
 
 // Get the OAuth redirect URI for Electron
+// Uses localhost callback that then redirects to bridge:// protocol
 ipcMain.handle('get-oauth-redirect-uri', () => {
-  return `${PROTOCOL}://auth/callback`;
+  return 'http://localhost:3001/api/auth/electron-callback';
 });
 
 ipcMain.handle('open-external', (event, url) => {
