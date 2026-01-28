@@ -108,7 +108,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsPreviewMode(false);
 
       // Tell server whether we're in Electron or Web
-      // This determines where the OAuth callback redirects to
       const platform = isElectron ? 'electron' : 'web';
       
       const res = await fetch(`${API_URL}/api/auth/github?platform=${platform}`, {
@@ -117,44 +116,54 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const data = await res.json();
 
       if (data.authUrl) {
-        // Redirect to GitHub
         if (isElectron && bridge?.openExternal) {
-          // In Electron, open in external browser
-          // Server completes OAuth and sets cookie, we poll to detect completion
+          // In Electron: open browser and poll using the auth token
           console.log('[Auth] Opening GitHub auth in external browser (Electron mode)');
+          console.log('[Auth] Auth token for polling:', data.authToken);
+          
           await bridge.openExternal(data.authUrl);
           
-          // Poll for auth completion since server sets cookie in browser
-          // This runs while user is authenticating in their browser
-          const pollForAuth = async () => {
-            let attempts = 0;
-            const maxAttempts = 60; // 2 minutes max
-            
-            const poll = setInterval(async () => {
-              attempts++;
-              try {
-                const authRes = await fetch(`${API_URL}/api/auth/me`, {
-                  credentials: 'include'
-                });
-                
-                if (authRes.ok) {
-                  const userData = await authRes.json();
-                  console.log('[Auth] Detected successful auth via polling:', userData.username);
-                  clearInterval(poll);
-                  setUser(userData);
-                }
-              } catch (e) {
-                // Ignore errors during polling
-              }
+          // Poll for auth completion using the pending auth token
+          if (data.authToken) {
+            const pollForAuth = () => {
+              let attempts = 0;
+              const maxAttempts = 60; // 2 minutes max
               
-              if (attempts >= maxAttempts) {
-                console.log('[Auth] Stopped polling after timeout');
-                clearInterval(poll);
-              }
-            }, 2000); // Poll every 2 seconds
-          };
-          
-          pollForAuth();
+              const poll = setInterval(async () => {
+                attempts++;
+                try {
+                  const authRes = await fetch(`${API_URL}/api/auth/check-pending/${data.authToken}`, {
+                    credentials: 'include'
+                  });
+                  
+                  const result = await authRes.json();
+                  console.log('[Auth] Poll result:', result.status);
+                  
+                  if (result.status === 'completed') {
+                    console.log('[Auth] Auth completed! User:', result.user?.username);
+                    clearInterval(poll);
+                    setUser(result.user);
+                  } else if (result.status === 'error') {
+                    console.error('[Auth] Auth failed:', result.error);
+                    clearInterval(poll);
+                    alert(`Authentication failed: ${result.error}`);
+                  } else if (result.status === 'not_found') {
+                    console.warn('[Auth] Auth token expired or invalid');
+                    clearInterval(poll);
+                  }
+                } catch (e) {
+                  console.error('[Auth] Poll error:', e);
+                }
+                
+                if (attempts >= maxAttempts) {
+                  console.log('[Auth] Stopped polling after timeout');
+                  clearInterval(poll);
+                }
+              }, 1500); // Poll every 1.5 seconds
+            };
+            
+            pollForAuth();
+          }
         } else {
           // In web, just redirect - callback will set cookie and redirect back
           console.log('[Auth] Redirecting to GitHub auth (Web mode)');

@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { getDb } from './db.js';
 import { processScan } from './worker.js';
@@ -122,6 +123,20 @@ function getAuthErrorPage(errorMessage) {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Pending auth tokens for Electron OAuth flow
+// Maps authToken -> { status: 'pending' | 'completed', userId?, userData?, createdAt }
+const pendingAuthTokens = new Map();
+
+// Clean up old pending tokens every 5 minutes
+setInterval(() => {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  for (const [token, data] of pendingAuthTokens.entries()) {
+    if (data.createdAt < fiveMinutesAgo) {
+      pendingAuthTokens.delete(token);
+    }
+  }
+}, 5 * 60 * 1000);
+
 app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:5173'],
   credentials: true
@@ -149,11 +164,11 @@ app.get('/api/health', (req, res) => {
 
 // GitHub OAuth - Get auth URL
 // Query params:
-//   platform=electron - indicates auth is from Electron app (will redirect to bridge://)
-//   platform=web - indicates auth is from web browser (will set cookie and redirect)
+//   platform=electron - indicates auth is from Electron app
+//   platform=web - indicates auth is from web browser
 app.get('/api/auth/github', (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID;
-  const platform = req.query.platform || 'electron'; // Default to electron for backward compat
+  const platform = req.query.platform || 'electron';
 
   if (!clientId) {
     return res.json({
@@ -162,43 +177,101 @@ app.get('/api/auth/github', (req, res) => {
     });
   }
 
+  // For Electron: generate a pending auth token that Electron will poll
+  let authToken = null;
+  if (platform === 'electron') {
+    authToken = crypto.randomUUID();
+    pendingAuthTokens.set(authToken, {
+      status: 'pending',
+      createdAt: Date.now()
+    });
+    console.log('[Auth] Created pending auth token:', authToken);
+  }
+
   // IMPORTANT: redirect_uri MUST match what's registered in the GitHub App
   const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3001/api/auth/electron-callback';
   
   // Scopes: repo (access repos), read:user (read user data), read:org (read org membership), user:email (read email)
   const scope = 'repo read:user read:org user:email';
 
-  // Use state parameter to track platform (electron vs web)
-  // This is how we know where to redirect after GitHub callback
-  const state = Buffer.from(JSON.stringify({ platform, ts: Date.now() })).toString('base64');
+  // Use state parameter to track platform AND auth token
+  const state = Buffer.from(JSON.stringify({ platform, authToken, ts: Date.now() })).toString('base64');
 
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
 
-  console.log('[Auth] Generated auth URL for platform:', platform);
-  res.json({ authUrl });
+  console.log('[Auth] Generated auth URL for platform:', platform, 'authToken:', authToken);
+  res.json({ authUrl, authToken });
+});
+
+// Check pending auth status (for Electron polling)
+app.get('/api/auth/check-pending/:token', async (req, res) => {
+  const { token } = req.params;
+  
+  const pending = pendingAuthTokens.get(token);
+  
+  if (!pending) {
+    return res.json({ status: 'not_found' });
+  }
+  
+  if (pending.status === 'pending') {
+    return res.json({ status: 'pending' });
+  }
+  
+  if (pending.status === 'completed') {
+    // Set the auth cookie for Electron
+    const jwtToken = generateJWT(pending.userId);
+    setAuthCookie(res, jwtToken);
+    
+    // Clean up the pending token
+    pendingAuthTokens.delete(token);
+    
+    console.log('[Auth] Pending auth claimed by Electron for user:', pending.userData.username);
+    
+    return res.json({
+      status: 'completed',
+      user: pending.userData
+    });
+  }
+  
+  if (pending.status === 'error') {
+    pendingAuthTokens.delete(token);
+    return res.json({ status: 'error', error: pending.error });
+  }
+  
+  res.json({ status: 'unknown' });
 });
 
 // GitHub OAuth - GET callback (handles both Electron and web based on state)
 app.get('/api/auth/electron-callback', async (req, res) => {
   const { code, error, error_description, state } = req.query;
 
-  // Parse state to determine platform
-  let platform = 'electron'; // Default to electron
+  // Parse state to determine platform and auth token
+  let platform = 'electron';
+  let authToken = null;
   try {
     if (state) {
       const decoded = JSON.parse(Buffer.from(state, 'base64').toString('utf8'));
       platform = decoded.platform || 'electron';
+      authToken = decoded.authToken;
     }
   } catch (e) {
     console.warn('[Auth] Failed to parse state:', e.message);
   }
 
   const isElectron = platform === 'electron';
-  console.log('[Auth] OAuth callback received, platform:', platform, 'code:', !!code);
+  console.log('[Auth] OAuth callback received, platform:', platform, 'authToken:', authToken, 'code:', !!code);
 
   if (error) {
+    // Mark pending auth as failed
+    if (authToken && pendingAuthTokens.has(authToken)) {
+      pendingAuthTokens.set(authToken, {
+        status: 'error',
+        error: error_description || error,
+        createdAt: Date.now()
+      });
+    }
     if (isElectron) {
-      return res.redirect(`bridge://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(error_description || '')}`);
+      return res.send(getAuthErrorPage(error_description || error));
     }
     return res.redirect(`http://localhost:3000?auth_error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(error_description || '')}`);
   }
@@ -207,8 +280,7 @@ app.get('/api/auth/electron-callback', async (req, res) => {
     return res.status(400).send('Missing authorization code');
   }
 
-  // For Electron: Complete auth server-side, then show success page
-  // This fixes the issue where bridge:// protocol doesn't work in dev mode
+  // For Electron: Complete auth and store in pending tokens for polling
   if (isElectron) {
     console.log('[Auth] Completing OAuth for Electron platform');
     
@@ -234,6 +306,13 @@ app.get('/api/auth/electron-callback', async (req, res) => {
 
       if (tokenData.error) {
         console.error('[Auth] Token exchange failed:', tokenData.error);
+        if (authToken && pendingAuthTokens.has(authToken)) {
+          pendingAuthTokens.set(authToken, {
+            status: 'error',
+            error: tokenData.error_description || tokenData.error,
+            createdAt: Date.now()
+          });
+        }
         return res.send(getAuthErrorPage(tokenData.error_description || tokenData.error));
       }
 
@@ -266,17 +345,40 @@ app.get('/api/auth/electron-callback', async (req, res) => {
         user = await db.get('SELECT * FROM users WHERE id = ?', [result.lastID]);
       }
 
-      // Set auth cookie
-      const token = generateJWT(user.id);
-      setAuthCookie(res, token);
+      // Store completed auth in pending tokens map for Electron to claim
+      const userData = {
+        id: user.id,
+        githubId: String(githubUser.id),
+        username: githubUser.login,
+        email: githubUser.email || '',
+        avatarUrl: githubUser.avatar_url
+      };
+
+      if (authToken && pendingAuthTokens.has(authToken)) {
+        pendingAuthTokens.set(authToken, {
+          status: 'completed',
+          userId: user.id,
+          userData,
+          createdAt: Date.now()
+        });
+        console.log('[Auth] Stored completed auth in pending token:', authToken);
+      } else {
+        console.warn('[Auth] No pending auth token found, user will need to retry');
+      }
 
       console.log('[Auth] Electron OAuth complete for user:', githubUser.login);
       
-      // Return success page that tells user to return to Bridge
-      // The Electron app polls /api/auth/me and will pick up the session
+      // Return success page - Electron will pick up auth via polling
       return res.send(getAuthSuccessPage(githubUser.login));
     } catch (err) {
       console.error('[Auth] Electron OAuth error:', err);
+      if (authToken && pendingAuthTokens.has(authToken)) {
+        pendingAuthTokens.set(authToken, {
+          status: 'error',
+          error: 'Authentication failed. Please try again.',
+          createdAt: Date.now()
+        });
+      }
       return res.send(getAuthErrorPage('Authentication failed. Please try again.'));
     }
   }
