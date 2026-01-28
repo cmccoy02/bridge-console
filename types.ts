@@ -452,3 +452,216 @@ export interface AutomationSettings {
   createdAt?: string;
   updatedAt?: string;
 }
+
+// ===== SOFTWARE CAPITALIZATION (CapEx) TYPES =====
+
+export type CapExCategory =
+  | 'new-feature'          // Capitalizableork that adds new functionality
+  | 'enhancement'          // Capitalizable - improvements to existing features
+  | 'maintenance'          // Not capitalizable - keeping existing functionality working
+  | 'bug-fix'              // Not capitalizable - fixing defects
+  | 'infrastructure'       // Partially capitalizable - depends on context
+  | 'technical-debt'       // Not capitalizable - paying down existing debt
+  | 'documentation'        // Typically not capitalizable
+  | 'testing'              // Partially capitalizable - if part of new feature
+  | 'security';            // Partially capitalizable - depends on context
+
+export interface CapExEntry {
+  id?: number;
+  repositoryId: number;
+  userId: number;
+  repoName?: string;               // Populated from JOIN in API responses
+  repoUrl?: string;                // Populated from JOIN in API responses
+
+  // Time tracking
+  date: string;                    // YYYY-MM-DD format
+  hoursSpent: number;              // Decimal hours (e.g., 2.5)
+
+  // Categorization
+  category: CapExCategory;
+  isCapitalizable: boolean;        // Whether this work can be capitalized
+  capitalizablePercent: number;    // 0-100, portion that's capitalizable
+
+  // Description
+  description: string;
+  ticketId?: string;               // Jira/Linear/GitHub issue number
+  prUrl?: string;                  // Associated PR URL
+
+  // Calculated fields (for reporting)
+  capitalizableHours?: number;     // hoursSpent * (capitalizablePercent / 100)
+  expensedHours?: number;          // hoursSpent - capitalizableHours
+
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CapExSummary {
+  repositoryId?: number;           // null for org-wide summary
+  period: {
+    start: string;
+    end: string;
+  };
+
+  // Totals
+  totalHours: number;
+  capitalizableHours: number;
+  expensedHours: number;
+  capitalizationRate: number;      // Percentage (0-100)
+
+  // By category
+  byCategory: Record<CapExCategory, {
+    hours: number;
+    capitalizableHours: number;
+    entries: number;
+  }>;
+
+  // By repository (for org-wide)
+  byRepository?: Record<number, {
+    name: string;
+    hours: number;
+    capitalizableHours: number;
+  }>;
+
+  // Trends
+  weeklyTrend?: Array<{
+    week: string;
+    totalHours: number;
+    capitalizableHours: number;
+  }>;
+}
+
+export interface CapExSettings {
+  id?: number;
+  userId: number;
+
+  // Default capitalization rates by category
+  defaultRates: Record<CapExCategory, number>;
+
+  // Fiscal year settings
+  fiscalYearStart: string;         // MM-DD format (e.g., "01-01" for Jan 1)
+
+  // Export settings
+  exportFormat: 'csv' | 'xlsx' | 'json';
+
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// ===== ROADMAP TYPES =====
+
+export type RoadmapItemStatus =
+  | 'planned'              // Not started, on the roadmap
+  | 'in-progress'          // Currently being worked on
+  | 'blocked'              // Blocked by dependencies or issues
+  | 'completed'            // Finished
+  | 'cancelled';           // No longer planned
+
+export type RoadmapItemPriority = 'critical' | 'high' | 'medium' | 'low';
+
+export type RoadmapItemSource =
+  | 'manual'               // Manually added by user
+  | 'scan-task'            // Generated from Bridge scan
+  | 'security-finding'     // From security scan
+  | 'dependency-update'    // From dependency analysis
+  | 'github-issue';        // Imported from GitHub
+
+export interface RoadmapItem {
+  id?: number;
+  userId: number;
+  repositoryId?: number;           // null for org-wide items
+  repoName?: string;               // Populated from JOIN in API responses
+
+  // Core fields
+  title: string;
+  description?: string;
+  status: RoadmapItemStatus;
+  priority: RoadmapItemPriority;
+
+  // Source tracking
+  source: RoadmapItemSource;
+  sourceId?: string;               // ID from source system (scan ID, issue number, etc.)
+  sourceUrl?: string;              // Link back to source
+
+  // Timing
+  targetDate?: string;             // When this should be completed
+  startDate?: string;              // When work began
+  completedDate?: string;          // When it was finished
+
+  // Effort estimation
+  estimatedHours?: number;
+  actualHours?: number;
+
+  // Dependencies
+  blockedBy?: number[];            // IDs of items that block this one
+  blocks?: number[];               // IDs of items this blocks
+
+  // Categorization
+  category?: string;               // e.g., "dependencies", "security", "architecture"
+  tags?: string[];                 // Free-form tags
+
+  // Assignment
+  assignee?: string;               // GitHub username or email
+
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RoadmapMilestone {
+  id?: number;
+  userId: number;
+
+  // Core fields
+  title: string;
+  description?: string;
+  targetDate: string;
+
+  // Status
+  status: 'upcoming' | 'in-progress' | 'completed' | 'missed';
+  completedDate?: string;
+
+  // Items
+  itemIds: number[];               // RoadmapItem IDs in this milestone
+
+  // Progress
+  totalItems: number;
+  completedItems: number;
+  progressPercent: number;
+
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface RoadmapView {
+  // Filter state
+  repositories?: number[];         // Filter by repos (empty = all)
+  statuses?: RoadmapItemStatus[];
+  priorities?: RoadmapItemPriority[];
+  dateRange?: {
+    start: string;
+    end: string;
+  };
+
+  // Aggregated data
+  items: RoadmapItem[];
+  milestones: RoadmapMilestone[];
+
+  // Statistics
+  stats: {
+    totalItems: number;
+    byStatus: Record<RoadmapItemStatus, number>;
+    byPriority: Record<RoadmapItemPriority, number>;
+    byRepository: Record<number, { name: string; count: number }>;
+    overdueCount: number;
+    upcomingCount: number;        // Due in next 14 days
+  };
+
+  // Timeline data for visualization
+  timeline: Array<{
+    date: string;
+    items: RoadmapItem[];
+    milestones: RoadmapMilestone[];
+  }>;
+}

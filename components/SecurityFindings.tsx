@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   ShieldAlert,
@@ -20,6 +20,10 @@ import {
   Terminal,
   Code,
   Key,
+  GitPullRequest,
+  Rocket,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 
 interface SecurityFinding {
@@ -98,6 +102,10 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
   const [generatingFix, setGeneratingFix] = useState<number | null>(null);
   const [fixes, setFixes] = useState<Record<number, any>>({});
   const [copiedFix, setCopiedFix] = useState<number | null>(null);
+
+  // Autonomous fix + PR state
+  const [fixJobs, setFixJobs] = useState<Record<number, { jobId: number; status: string; progress?: any; result?: any }>>({});
+  const [applyingFix, setApplyingFix] = useState<number | null>(null);
 
   // Poll for scan status
   useEffect(() => {
@@ -201,6 +209,87 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
     await navigator.clipboard.writeText(fix.solution_code);
     setCopiedFix(index);
     setTimeout(() => setCopiedFix(null), 2000);
+  };
+
+  // Poll for fix job status
+  const pollFixJob = useCallback(async (jobId: number, findingIndex: number) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/security-fix-jobs/${jobId}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch fix job status');
+      }
+
+      const data = await response.json();
+
+      setFixJobs((prev) => ({
+        ...prev,
+        [findingIndex]: {
+          jobId,
+          status: data.status,
+          progress: data.progress,
+          result: data.result,
+        },
+      }));
+
+      // Keep polling if still running
+      if (data.status === 'pending' || data.status === 'running') {
+        setTimeout(() => pollFixJob(jobId, findingIndex), 2000);
+      } else {
+        setApplyingFix(null);
+      }
+    } catch (err) {
+      console.error('Fix job poll error:', err);
+      setApplyingFix(null);
+    }
+  }, []);
+
+  // Trigger autonomous fix + PR creation
+  const applyFixAndCreatePR = async (finding: SecurityFinding, index: number) => {
+    setApplyingFix(index);
+
+    try {
+      const response = await fetch(`${API_BASE}/api/security/fix-and-pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          repositoryId,
+          finding,
+          securityScanId: currentScanId,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to start fix job');
+      }
+
+      const data = await response.json();
+
+      setFixJobs((prev) => ({
+        ...prev,
+        [index]: {
+          jobId: data.jobId,
+          status: 'pending',
+        },
+      }));
+
+      // Start polling
+      setTimeout(() => pollFixJob(data.jobId, index), 1000);
+    } catch (err: any) {
+      setFixJobs((prev) => ({
+        ...prev,
+        [index]: {
+          jobId: 0,
+          status: 'failed',
+          result: { success: false, error: err.message },
+        },
+      }));
+      setApplyingFix(null);
+    }
   };
 
   // Get GitHub file URL
@@ -530,6 +619,94 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
                           <>
                             <Sparkles size={12} />
                             Generate AI Fix
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* Autonomous Fix + PR Section */}
+                    {fixJobs[idx] ? (
+                      <div className={`rounded p-3 ${
+                        fixJobs[idx].status === 'completed' && fixJobs[idx].result?.success
+                          ? 'bg-green-950/30 border border-green-800/50'
+                          : fixJobs[idx].status === 'failed' || (fixJobs[idx].result && !fixJobs[idx].result.success)
+                          ? 'bg-red-950/30 border border-red-800/50'
+                          : 'bg-apex-950/30 border border-apex-800/50'
+                      }`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          {fixJobs[idx].status === 'completed' && fixJobs[idx].result?.success ? (
+                            <CheckCircle2 size={14} className="text-green-400" />
+                          ) : fixJobs[idx].status === 'failed' || (fixJobs[idx].result && !fixJobs[idx].result.success) ? (
+                            <XCircle size={14} className="text-red-400" />
+                          ) : (
+                            <Loader2 size={14} className="text-apex-400 animate-spin" />
+                          )}
+                          <span className={`text-xs font-bold ${
+                            fixJobs[idx].status === 'completed' && fixJobs[idx].result?.success
+                              ? 'text-green-400'
+                              : fixJobs[idx].status === 'failed' || (fixJobs[idx].result && !fixJobs[idx].result.success)
+                              ? 'text-red-400'
+                              : 'text-apex-400'
+                          }`}>
+                            {fixJobs[idx].status === 'completed' && fixJobs[idx].result?.success
+                              ? 'Fix Applied & PR Created'
+                              : fixJobs[idx].status === 'failed' || (fixJobs[idx].result && !fixJobs[idx].result.success)
+                              ? 'Fix Failed'
+                              : 'Applying Fix...'}
+                          </span>
+                        </div>
+
+                        {/* Progress indicator */}
+                        {fixJobs[idx].progress && (fixJobs[idx].status === 'pending' || fixJobs[idx].status === 'running') && (
+                          <div className="mb-2">
+                            <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                              <span>{fixJobs[idx].progress.phase}</span>
+                              <span>{fixJobs[idx].progress.step}/{fixJobs[idx].progress.totalSteps}</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-apex-600 to-apex-500 transition-all duration-300"
+                                style={{ width: `${fixJobs[idx].progress.percent}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Success result with PR link */}
+                        {fixJobs[idx].result?.success && fixJobs[idx].result.prUrl && (
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={fixJobs[idx].result.prUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-500 text-white rounded transition-colors"
+                            >
+                              <GitPullRequest size={12} />
+                              View Pull Request #{fixJobs[idx].result.prNumber}
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Error message */}
+                        {fixJobs[idx].result && !fixJobs[idx].result.success && fixJobs[idx].result.error && (
+                          <p className="text-xs text-red-400">{fixJobs[idx].result.error}</p>
+                        )}
+                      </div>
+                    ) : fixes[idx]?.success && (
+                      <button
+                        onClick={() => applyFixAndCreatePR(finding, idx)}
+                        disabled={applyingFix !== null}
+                        className="flex items-center gap-2 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-500 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {applyingFix === idx ? (
+                          <>
+                            <Loader2 size={12} className="animate-spin" />
+                            Starting...
+                          </>
+                        ) : (
+                          <>
+                            <Rocket size={12} />
+                            Apply Fix & Create PR
                           </>
                         )}
                       </button>

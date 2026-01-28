@@ -65,6 +65,12 @@
   "build": {
     "appId": "com.bridge.console",
     "productName": "Bridge",
+    "protocols": [
+      {
+        "name": "Bridge OAuth",
+        "schemes": ["bridge"]
+      }
+    ],
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -111,7 +117,15 @@
       "category": "public.app-category.developer-tools",
       "target": "dir",
       "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "extendInfo": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLName": "Bridge OAuth",
+            "CFBundleURLSchemes": ["bridge"]
+          }
+        ]
+      }
     },
     "win": {
       "target": [

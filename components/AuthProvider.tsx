@@ -120,10 +120,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Redirect to GitHub
         if (isElectron && bridge?.openExternal) {
           // In Electron, open in external browser
-          // After auth, GitHub redirects to server, which redirects to bridge://
-          // Electron intercepts bridge:// and calls handleOAuthCallback
+          // Server completes OAuth and sets cookie, we poll to detect completion
           console.log('[Auth] Opening GitHub auth in external browser (Electron mode)');
           await bridge.openExternal(data.authUrl);
+          
+          // Poll for auth completion since server sets cookie in browser
+          // This runs while user is authenticating in their browser
+          const pollForAuth = async () => {
+            let attempts = 0;
+            const maxAttempts = 60; // 2 minutes max
+            
+            const poll = setInterval(async () => {
+              attempts++;
+              try {
+                const authRes = await fetch(`${API_URL}/api/auth/me`, {
+                  credentials: 'include'
+                });
+                
+                if (authRes.ok) {
+                  const userData = await authRes.json();
+                  console.log('[Auth] Detected successful auth via polling:', userData.username);
+                  clearInterval(poll);
+                  setUser(userData);
+                }
+              } catch (e) {
+                // Ignore errors during polling
+              }
+              
+              if (attempts >= maxAttempts) {
+                console.log('[Auth] Stopped polling after timeout');
+                clearInterval(poll);
+              }
+            }, 2000); // Poll every 2 seconds
+          };
+          
+          pollForAuth();
         } else {
           // In web, just redirect - callback will set cookie and redirect back
           console.log('[Auth] Redirecting to GitHub auth (Web mode)');

@@ -247,6 +247,109 @@ export async function getDb() {
       )
     `);
 
+    // Security fix jobs table for autonomous fix + PR creation
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS security_fix_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repositoryId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        securityScanId INTEGER,
+        findingData JSON NOT NULL,
+        status TEXT DEFAULT 'pending',
+        progress JSON,
+        result JSON,
+        logs TEXT,
+        startedAt DATETIME,
+        completedAt DATETIME,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id),
+        FOREIGN KEY (userId) REFERENCES users(id),
+        FOREIGN KEY (securityScanId) REFERENCES security_scans(id)
+      )
+    `);
+
+    // Software Capitalization (CapEx) entries
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS capex_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        repositoryId INTEGER NOT NULL,
+        userId INTEGER NOT NULL,
+        date TEXT NOT NULL,
+        hoursSpent REAL NOT NULL,
+        category TEXT NOT NULL,
+        isCapitalizable INTEGER DEFAULT 1,
+        capitalizablePercent INTEGER DEFAULT 100,
+        description TEXT,
+        ticketId TEXT,
+        prUrl TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id),
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // CapEx settings per user
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS capex_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER UNIQUE NOT NULL,
+        defaultRates JSON DEFAULT '{}',
+        fiscalYearStart TEXT DEFAULT '01-01',
+        exportFormat TEXT DEFAULT 'csv',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
+    // Roadmap items
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS roadmap_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        repositoryId INTEGER,
+        title TEXT NOT NULL,
+        description TEXT,
+        status TEXT DEFAULT 'planned',
+        priority TEXT DEFAULT 'medium',
+        source TEXT DEFAULT 'manual',
+        sourceId TEXT,
+        sourceUrl TEXT,
+        targetDate TEXT,
+        startDate TEXT,
+        completedDate TEXT,
+        estimatedHours REAL,
+        actualHours REAL,
+        blockedBy JSON DEFAULT '[]',
+        blocks JSON DEFAULT '[]',
+        category TEXT,
+        tags JSON DEFAULT '[]',
+        assignee TEXT,
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id),
+        FOREIGN KEY (repositoryId) REFERENCES repositories(id)
+      )
+    `);
+
+    // Roadmap milestones
+    await sqliteDb.exec(`
+      CREATE TABLE IF NOT EXISTS roadmap_milestones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        targetDate TEXT NOT NULL,
+        status TEXT DEFAULT 'upcoming',
+        completedDate TEXT,
+        itemIds JSON DEFAULT '[]',
+        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (userId) REFERENCES users(id)
+      )
+    `);
+
     console.log('[DB] SQLite initialized');
     return sqliteDb;
   }
@@ -426,6 +529,100 @@ export async function getDb() {
     )
   `);
 
+  // Security fix jobs table for autonomous fix + PR creation
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS security_fix_jobs (
+      id SERIAL PRIMARY KEY,
+      "repositoryId" INTEGER NOT NULL REFERENCES repositories(id),
+      "userId" INTEGER NOT NULL REFERENCES users(id),
+      "securityScanId" INTEGER REFERENCES security_scans(id),
+      "findingData" JSONB NOT NULL,
+      status TEXT DEFAULT 'pending',
+      progress JSONB,
+      result JSONB,
+      logs TEXT,
+      "startedAt" TIMESTAMP,
+      "completedAt" TIMESTAMP,
+      "createdAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Software Capitalization (CapEx) entries
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS capex_entries (
+      id SERIAL PRIMARY KEY,
+      "repositoryId" INTEGER NOT NULL REFERENCES repositories(id),
+      "userId" INTEGER NOT NULL REFERENCES users(id),
+      date TEXT NOT NULL,
+      "hoursSpent" REAL NOT NULL,
+      category TEXT NOT NULL,
+      "isCapitalizable" INTEGER DEFAULT 1,
+      "capitalizablePercent" INTEGER DEFAULT 100,
+      description TEXT,
+      "ticketId" TEXT,
+      "prUrl" TEXT,
+      "createdAt" TIMESTAMP DEFAULT NOW(),
+      "updatedAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // CapEx settings per user
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS capex_settings (
+      id SERIAL PRIMARY KEY,
+      "userId" INTEGER UNIQUE NOT NULL REFERENCES users(id),
+      "defaultRates" JSONB DEFAULT '{}',
+      "fiscalYearStart" TEXT DEFAULT '01-01',
+      "exportFormat" TEXT DEFAULT 'csv',
+      "createdAt" TIMESTAMP DEFAULT NOW(),
+      "updatedAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Roadmap items
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS roadmap_items (
+      id SERIAL PRIMARY KEY,
+      "userId" INTEGER NOT NULL REFERENCES users(id),
+      "repositoryId" INTEGER REFERENCES repositories(id),
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT DEFAULT 'planned',
+      priority TEXT DEFAULT 'medium',
+      source TEXT DEFAULT 'manual',
+      "sourceId" TEXT,
+      "sourceUrl" TEXT,
+      "targetDate" TEXT,
+      "startDate" TEXT,
+      "completedDate" TEXT,
+      "estimatedHours" REAL,
+      "actualHours" REAL,
+      "blockedBy" JSONB DEFAULT '[]',
+      blocks JSONB DEFAULT '[]',
+      category TEXT,
+      tags JSONB DEFAULT '[]',
+      assignee TEXT,
+      "createdAt" TIMESTAMP DEFAULT NOW(),
+      "updatedAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  // Roadmap milestones
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS roadmap_milestones (
+      id SERIAL PRIMARY KEY,
+      "userId" INTEGER NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      description TEXT,
+      "targetDate" TEXT NOT NULL,
+      status TEXT DEFAULT 'upcoming',
+      "completedDate" TEXT,
+      "itemIds" JSONB DEFAULT '[]',
+      "createdAt" TIMESTAMP DEFAULT NOW(),
+      "updatedAt" TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
   // Create indexes for performance
   try {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_scans_repository ON scans("repositoryId")`);
@@ -438,6 +635,15 @@ export async function getDb() {
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_update_jobs_user ON update_jobs("userId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_security_scans_repo ON security_scans("repositoryId")`);
     await db.exec(`CREATE INDEX IF NOT EXISTS idx_security_scans_status ON security_scans(status)`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_security_fix_jobs_repo ON security_fix_jobs("repositoryId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_capex_entries_repo ON capex_entries("repositoryId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_capex_entries_user ON capex_entries("userId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_capex_entries_date ON capex_entries(date)`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_roadmap_items_user ON roadmap_items("userId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_roadmap_items_repo ON roadmap_items("repositoryId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_roadmap_items_status ON roadmap_items(status)`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_roadmap_milestones_user ON roadmap_milestones("userId")`);
+    await db.exec(`CREATE INDEX IF NOT EXISTS idx_security_fix_jobs_user ON security_fix_jobs("userId")`);
   } catch (e) {
     // Indexes might already exist, that's fine
   }

@@ -55,12 +55,16 @@ import {
   Check
 } from 'lucide-react';
 import GitHubBrowser from './components/GitHubBrowser';
+import SoftwareCapitalization from './components/SoftwareCapitalization';
+import Roadmap from './components/Roadmap';
+import { Map, DollarSign, FolderGit2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
 type AddRepoMode = 'url' | 'browse';
+type MainDashboardTab = 'repositories' | 'roadmap' | 'capex';
 
 interface Repository {
   id: number;
@@ -77,6 +81,7 @@ interface Repository {
 const AppContent: React.FC = () => {
   const { user, logout, login, isLoading: authLoading, isPreviewMode, exitPreviewMode, handleOAuthCallback } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('repositories');
+  const [mainDashboardTab, setMainDashboardTab] = useState<MainDashboardTab>('repositories');
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [metrics, setMetrics] = useState<BridgeMetrics | null>(null);
@@ -748,7 +753,7 @@ const AppContent: React.FC = () => {
         {viewMode === 'repositories' && !isScanning && backendConnected !== false && (
           <div className="animate-in fade-in duration-500">
             {/* Show Welcome Screen for first-time users with no repositories */}
-            {!isLoadingRepos && repositories.length === 0 ? (
+            {!isLoadingRepos && repositories.length === 0 && mainDashboardTab === 'repositories' ? (
               <WelcomeScreen onGetStarted={() => setViewMode('add-repository')} />
             ) : (
               <>
@@ -763,16 +768,42 @@ const AppContent: React.FC = () => {
                   </p>
                 </div>
 
-                {/* Organization Overview - Shows aggregate stats when multiple repos */}
-                {!isLoadingRepos && repositories.length > 1 && (
-                  <OrgOverview
-                    repositories={repositories}
-                    onRepoClick={(repo) => selectRepository(repo)}
+                {/* Main Dashboard Navigation Tabs */}
+                <div className="flex gap-2 mb-6 border-b border-slate-800">
+                  <MainDashboardTabButton
+                    active={mainDashboardTab === 'repositories'}
+                    onClick={() => setMainDashboardTab('repositories')}
+                    icon={<FolderGit2 size={16} />}
+                    label="Repositories"
+                    badge={repositories.length}
                   />
-                )}
+                  <MainDashboardTabButton
+                    active={mainDashboardTab === 'roadmap'}
+                    onClick={() => setMainDashboardTab('roadmap')}
+                    icon={<Map size={16} />}
+                    label="Roadmap"
+                  />
+                  <MainDashboardTabButton
+                    active={mainDashboardTab === 'capex'}
+                    onClick={() => setMainDashboardTab('capex')}
+                    icon={<DollarSign size={16} />}
+                    label="Software CapEx"
+                  />
+                </div>
 
-                {/* Search and Filter Bar */}
-                {!isLoadingRepos && repositories.length > 0 && (
+                {/* Repositories Tab Content */}
+                {mainDashboardTab === 'repositories' && (
+                  <>
+                    {/* Organization Overview - Shows aggregate stats when multiple repos */}
+                    {!isLoadingRepos && repositories.length > 1 && (
+                      <OrgOverview
+                        repositories={repositories}
+                        onRepoClick={(repo) => selectRepository(repo)}
+                      />
+                    )}
+
+                    {/* Search and Filter Bar */}
+                    {!isLoadingRepos && repositories.length > 0 && (
               <div className="mb-6 flex flex-col sm:flex-row gap-3">
                 {/* Search Input */}
                 <div className="relative flex-1">
@@ -895,6 +926,18 @@ const AppContent: React.FC = () => {
                 </>
               )}
             </div>
+                  </>
+                )}
+
+                {/* Roadmap Tab Content */}
+                {mainDashboardTab === 'roadmap' && (
+                  <Roadmap />
+                )}
+
+                {/* Software CapEx Tab Content */}
+                {mainDashboardTab === 'capex' && (
+                  <SoftwareCapitalization />
+                )}
               </>
             )}
           </div>
@@ -1361,8 +1404,8 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
       onClick={onClick}
       className={`
          px-4 py-3 flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-all relative
-         ${active 
-            ? 'text-apex-500 border-b-2 border-apex-500' 
+         ${active
+            ? 'text-apex-500 border-b-2 border-apex-500'
             : 'text-slate-500 hover:text-slate-300 border-b-2 border-transparent'
          }
       `}
@@ -1372,6 +1415,30 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
       {badge !== undefined && badge > 0 && (
          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
             active ? 'bg-apex-500 text-black' : 'bg-slate-800 text-slate-400'
+         }`}>
+            {badge}
+         </span>
+      )}
+   </button>
+);
+
+// Main dashboard tab button (for Repositories, Roadmap, CapEx)
+const MainDashboardTabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }> = ({ active, onClick, icon, label, badge }) => (
+   <button
+      onClick={onClick}
+      className={`
+         px-5 py-3 flex items-center gap-2 font-bold uppercase tracking-wider text-sm transition-all relative
+         ${active
+            ? 'text-white bg-apex-500/10 border-b-2 border-apex-500'
+            : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border-b-2 border-transparent'
+         }
+      `}
+   >
+      {icon}
+      <span>{label}</span>
+      {badge !== undefined && badge > 0 && (
+         <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            active ? 'bg-apex-500 text-black' : 'bg-slate-700 text-slate-300'
          }`}>
             {badge}
          </span>

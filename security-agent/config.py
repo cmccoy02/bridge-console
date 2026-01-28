@@ -12,7 +12,7 @@ load_dotenv()
 
 # Google Gemini Configuration (replacing Qwen3)
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', os.getenv('GOOGLE_API_KEY', ''))
-GEMINI_MODEL_NAME = os.getenv('GEMINI_MODEL_NAME', 'gemini-2.0-flash')
+GEMINI_MODEL_NAME = os.getenv('GEMINI_MODEL_NAME', 'gemini-3-pro')
 
 # Gemini API endpoint
 GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta'
