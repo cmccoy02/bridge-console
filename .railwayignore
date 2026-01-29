@@ -1,0 +1,59 @@
+# Railway ignore file - exclude files not needed for backend deployment
+
+# Frontend source (not needed for API server)
+*.tsx
+*.ts
+!server/**
+components/
+utils/
+data/
+public/
+index.html
+
+# Build artifacts
+dist/
+release/
+*.map
+
+# Electron files
+electron/
+build-electron.cjs
+
+# Development files
+*.md
+.cursor/
+.vscode/
+.git/
+.gitignore
+
+# Test files
+test-*.js
+*.test.js
+*.spec.js
+__tests__/
+
+# Temp directories
+temp_scans/
+temp_updates/
+
+# Config files only needed for frontend/electron
+vite.config.ts
+tailwind.config.js
+postcss.config.js
+tsconfig.json
+
+# Large/unnecessary node_modules (Railway will install fresh)
+node_modules/
+
+# SQLite database (use PostgreSQL in production)
+*.sqlite
+*.sqlite3
+
+# Environment files (set in Railway dashboard)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*

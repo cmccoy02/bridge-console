@@ -1,0 +1,21 @@
+# Nixpacks configuration for Railway deployment
+# Bridge Console - Backend API Server
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "python3", "gcc", "gnumake"]
+
+[phases.install]
+cmds = [
+  "npm ci --omit=dev --ignore-scripts",
+  "npm rebuild sqlite3"
+]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "node server/index.js"
+
+[variables]
+NODE_ENV = "production"
+NPM_CONFIG_PRODUCTION = "true"

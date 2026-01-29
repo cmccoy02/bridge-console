@@ -470,8 +470,6 @@ export interface CapExEntry {
   id?: number;
   repositoryId: number;
   userId: number;
-  repoName?: string;               // Populated from JOIN in API responses
-  repoUrl?: string;                // Populated from JOIN in API responses
 
   // Time tracking
   date: string;                    // YYYY-MM-DD format
@@ -570,7 +568,6 @@ export interface RoadmapItem {
   id?: number;
   userId: number;
   repositoryId?: number;           // null for org-wide items
-  repoName?: string;               // Populated from JOIN in API responses
 
   // Core fields
   title: string;

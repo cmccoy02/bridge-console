@@ -11,18 +11,11 @@ import AddRepositoryCard from './components/AddRepositoryCard';
 import { AuthProvider, useAuth } from './components/AuthProvider';
 import LoginScreen from './components/LoginScreen';
 import ScanHistory from './components/ScanHistory';
-import ScoreTrend from './components/ScoreTrend';
-import CodeIssues from './components/CodeIssues';
-import QuickActions from './components/QuickActions';
-import OrgOverview from './components/OrgOverview';
 import ScanProgress from './components/ScanProgress';
-import { sampleRepositories, sampleMetrics, sampleOrgStats } from './data/sampleData';
 import ErrorBoundary, { InlineError } from './components/ErrorBoundary';
 import ActionableTasks from './components/ActionableTasks';
 import WelcomeScreen from './components/WelcomeScreen';
 import ConnectionError from './components/ConnectionError';
-import SecurityFindings from './components/SecurityFindings';
-import PriorityFocus from './components/PriorityFocus';
 import { validateGitHubUrl, type ValidationResult } from './utils/validation';
 import mockData from './mock-bridge-metrics.json';
 import {
@@ -55,16 +48,12 @@ import {
   Check
 } from 'lucide-react';
 import GitHubBrowser from './components/GitHubBrowser';
-import SoftwareCapitalization from './components/SoftwareCapitalization';
-import Roadmap from './components/Roadmap';
-import { Map, DollarSign, FolderGit2 } from 'lucide-react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations';
+type TabType = 'overview' | 'packages' | 'insights' | 'automations';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
 type AddRepoMode = 'url' | 'browse';
-type MainDashboardTab = 'repositories' | 'roadmap' | 'capex';
 
 interface Repository {
   id: number;
@@ -79,9 +68,8 @@ interface Repository {
 
 // Wrapped App component with auth
 const AppContent: React.FC = () => {
-  const { user, logout, login, isLoading: authLoading, isPreviewMode, exitPreviewMode, handleOAuthCallback } = useAuth();
+  const { user, logout, isLoading: authLoading, handleOAuthCallback } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('repositories');
-  const [mainDashboardTab, setMainDashboardTab] = useState<MainDashboardTab>('repositories');
   const [repositories, setRepositories] = useState<Repository[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [metrics, setMetrics] = useState<BridgeMetrics | null>(null);
@@ -117,20 +105,10 @@ const AppContent: React.FC = () => {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ prUrl?: string; message?: string; error?: string } | null>(null);
 
-  // Handle OAuth callback and errors
+  // Handle OAuth callback
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
-    const authError = urlParams.get('auth_error');
-    const errorDescription = urlParams.get('error_description');
-
-    if (authError) {
-      console.error('OAuth error:', authError, errorDescription);
-      setError(errorDescription || authError || 'Authentication failed');
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
     if (code) {
       handleOAuthCallback(code)
         .then(() => {
@@ -139,7 +117,6 @@ const AppContent: React.FC = () => {
         })
         .catch((err) => {
           console.error('OAuth callback failed:', err);
-          setError('OAuth callback failed. Please try again.');
           window.history.replaceState({}, '', window.location.pathname);
         });
     }
@@ -148,14 +125,6 @@ const AppContent: React.FC = () => {
   // Check backend connection and load repositories with retry
   // NOTE: This hook must be called unconditionally before any early returns
   useEffect(() => {
-    // Handle preview mode with sample data
-    if (isPreviewMode && !user) {
-      setRepositories(sampleRepositories as Repository[]);
-      setIsLoadingRepos(false);
-      setBackendConnected(true);
-      return;
-    }
-
     // Only run if user is authenticated
     if (!user || authLoading) return;
 
@@ -196,7 +165,7 @@ const AppContent: React.FC = () => {
       }
     };
     checkBackend();
-  }, [user, authLoading, isPreviewMode]);
+  }, [user, authLoading]);
 
   // Cleanup update poll on unmount
   useEffect(() => {
@@ -240,13 +209,9 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Show login screen if not authenticated and not in preview mode
-  if (!user && !isPreviewMode) {
+  if (!user) {
     return <LoginScreen />;
   }
-
-  // Use sample data in preview mode
-  const isPreview = isPreviewMode && !user;
 
   const loadRepositories = async () => {
     setIsLoadingRepos(true);
@@ -614,13 +579,7 @@ const AppContent: React.FC = () => {
     setSelectedRepo(repo);
     setViewMode('repository-detail');
     setActiveTab('overview');
-
-    // In preview mode, use sample metrics
-    if (isPreview) {
-      setMetrics(sampleMetrics);
-      return;
-    }
-
+    
     // Load existing scan data if available
     if (repo.lastScanData) {
       setMetrics(repo.lastScanData);
@@ -636,10 +595,7 @@ const AppContent: React.FC = () => {
     setRepoUrl('');
     setError(null);
     setCurrentScanId(null);
-    // Don't reload in preview mode
-    if (!isPreview) {
-      loadRepositories();
-    }
+    loadRepositories();
   };
 
   const exportCurrentScan = () => {
@@ -700,40 +656,26 @@ const AppContent: React.FC = () => {
           </div>
 
           <div className="hidden md:flex items-center gap-6 text-xs font-bold tracking-widest text-slate-500">
-             {isPreview ? (
-               <>
-                 <span className="text-[10px] bg-apex-500/20 text-apex-500 px-3 py-1 rounded border border-apex-500/30">
-                   PREVIEW MODE
-                 </span>
-                 <button
-                   onClick={login}
-                   className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded font-bold hover:bg-gray-100 transition-colors"
-                 >
-                   Connect GitHub
-                 </button>
-               </>
-             ) : user ? (
-               <>
-                 <div className="flex items-center gap-3">
-                    {user.avatarUrl && (
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.username}
-                        className="w-8 h-8 rounded-full border border-slate-700"
-                      />
-                    )}
-                    <span className="text-white">{user.username}</span>
-                 </div>
-                 <button
-                   onClick={logout}
-                   className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors group"
-                   title="Sign out and switch GitHub account"
-                 >
-                   <LogOut size={14} />
-                   <span className="hidden sm:inline">Sign Out</span>
-                 </button>
-               </>
-             ) : null}
+             <div className="flex items-center gap-3">
+                {user.avatarUrl && (
+                  <img 
+                    src={user.avatarUrl} 
+                    alt={user.username}
+                    className="w-8 h-8 rounded-full border border-slate-700"
+                  />
+                )}
+                <span className="text-white">{user.username}</span>
+                {user.isDemo && (
+                  <span className="text-[10px] bg-yellow-900/30 text-yellow-500 px-2 py-0.5 rounded">DEMO</span>
+                )}
+             </div>
+             <button 
+               onClick={logout}
+               className="flex items-center gap-2 text-slate-500 hover:text-red-500 transition-colors"
+             >
+               <LogOut size={14} />
+               <span>Logout</span>
+             </button>
           </div>
         </div>
       </header>
@@ -753,57 +695,21 @@ const AppContent: React.FC = () => {
         {viewMode === 'repositories' && !isScanning && backendConnected !== false && (
           <div className="animate-in fade-in duration-500">
             {/* Show Welcome Screen for first-time users with no repositories */}
-            {!isLoadingRepos && repositories.length === 0 && mainDashboardTab === 'repositories' ? (
+            {!isLoadingRepos && repositories.length === 0 ? (
               <WelcomeScreen onGetStarted={() => setViewMode('add-repository')} />
             ) : (
               <>
                 <div className="mb-6">
                   <h2 className="text-3xl font-ocr font-black text-white mb-2 uppercase">
-                    {isPreview ? 'Sample' : user?.username + "'s"} Dashboard
+                    {user?.username}'s Dashboard
                   </h2>
                   <p className="text-slate-400 font-mono text-sm">
-                    {isPreview
-                      ? 'Explore Bridge with sample data. Connect GitHub to see your repos.'
-                      : 'Monitor technical debt across your repositories'}
+                    Monitor technical debt across your repositories
                   </p>
                 </div>
 
-                {/* Main Dashboard Navigation Tabs */}
-                <div className="flex gap-2 mb-6 border-b border-slate-800">
-                  <MainDashboardTabButton
-                    active={mainDashboardTab === 'repositories'}
-                    onClick={() => setMainDashboardTab('repositories')}
-                    icon={<FolderGit2 size={16} />}
-                    label="Repositories"
-                    badge={repositories.length}
-                  />
-                  <MainDashboardTabButton
-                    active={mainDashboardTab === 'roadmap'}
-                    onClick={() => setMainDashboardTab('roadmap')}
-                    icon={<Map size={16} />}
-                    label="Roadmap"
-                  />
-                  <MainDashboardTabButton
-                    active={mainDashboardTab === 'capex'}
-                    onClick={() => setMainDashboardTab('capex')}
-                    icon={<DollarSign size={16} />}
-                    label="Software CapEx"
-                  />
-                </div>
-
-                {/* Repositories Tab Content */}
-                {mainDashboardTab === 'repositories' && (
-                  <>
-                    {/* Organization Overview - Shows aggregate stats when multiple repos */}
-                    {!isLoadingRepos && repositories.length > 1 && (
-                      <OrgOverview
-                        repositories={repositories}
-                        onRepoClick={(repo) => selectRepository(repo)}
-                      />
-                    )}
-
-                    {/* Search and Filter Bar */}
-                    {!isLoadingRepos && repositories.length > 0 && (
+                {/* Search and Filter Bar */}
+                {!isLoadingRepos && repositories.length > 0 && (
               <div className="mb-6 flex flex-col sm:flex-row gap-3">
                 {/* Search Input */}
                 <div className="relative flex-1">
@@ -926,18 +832,6 @@ const AppContent: React.FC = () => {
                 </>
               )}
             </div>
-                  </>
-                )}
-
-                {/* Roadmap Tab Content */}
-                {mainDashboardTab === 'roadmap' && (
-                  <Roadmap />
-                )}
-
-                {/* Software CapEx Tab Content */}
-                {mainDashboardTab === 'capex' && (
-                  <SoftwareCapitalization />
-                )}
               </>
             )}
           </div>
@@ -1017,7 +911,7 @@ const AppContent: React.FC = () => {
                            }
                            await loadRepositories();
                          }}
-                         isDemo={isPreview}
+                         isDemo={user?.isDemo}
                        />
                      </div>
                    )}
@@ -1179,22 +1073,6 @@ const AppContent: React.FC = () => {
                  </div>
               </div>
 
-              {/* Preview Mode Banner */}
-              {isPreview && (
-                <div className="mb-6 p-4 bg-apex-500/10 border border-apex-500/30 rounded-lg flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-white">You're viewing sample data</div>
-                    <div className="text-xs text-slate-400">Connect your GitHub to analyze your own repositories</div>
-                  </div>
-                  <button
-                    onClick={login}
-                    className="flex items-center gap-2 bg-white text-black px-4 py-2 rounded font-bold text-sm hover:bg-gray-100 transition-colors"
-                  >
-                    Connect GitHub
-                  </button>
-                </div>
-              )}
-
               {/* Tab Navigation */}
               <div className="flex gap-2 mb-6 border-b border-slate-800">
                  <TabButton 
@@ -1204,19 +1082,12 @@ const AppContent: React.FC = () => {
                     label="Overview"
                     badge={metrics.score.total}
                  />
-                 <TabButton
-                    active={activeTab === 'packages'}
+                 <TabButton 
+                    active={activeTab === 'packages'} 
                     onClick={() => setActiveTab('packages')}
                     icon={<Package size={16} />}
                     label="Packages"
                     badge={metrics.issues.outdatedDependencies.length + metrics.issues.unusedDependencies.length}
-                 />
-                 <TabButton
-                    active={activeTab === 'security'}
-                    onClick={() => setActiveTab('security')}
-                    icon={<ShieldAlert size={16} />}
-                    label="Security"
-                    badge={0}
                  />
                  <TabButton
                     active={activeTab === 'insights'}
@@ -1235,26 +1106,7 @@ const AppContent: React.FC = () => {
               </div>
 
               {/* Tab Content */}
-              {activeTab === 'overview' && (
-                <>
-                  <OverviewTab metrics={metrics} />
-                  {selectedRepo && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-                      <ScoreTrend repositoryId={selectedRepo.id} />
-                      <QuickActions
-                        repositoryId={selectedRepo.id}
-                        repoUrl={selectedRepo.repoUrl}
-                        staleBranches={metrics.meta.staleBranches}
-                        unusedDependencies={metrics.issues.unusedDependencies}
-                        onUpdateClick={triggerUpdate}
-                        onCleanupClick={() => triggerCleanup(metrics.issues.unusedDependencies)}
-                        isUpdating={isUpdating}
-                        isCleaningUp={isCleaningUp}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
+              {activeTab === 'overview' && <OverviewTab metrics={metrics} />}
               {activeTab === 'packages' && (
                 <>
                   {/* Update Success Banner */}
@@ -1326,14 +1178,7 @@ const AppContent: React.FC = () => {
                   />
                 </>
               )}
-              {activeTab === 'insights' && selectedRepo && <InsightsTab metrics={metrics} repoUrl={selectedRepo.repoUrl} />}
-              {activeTab === 'security' && selectedRepo && (
-                <SecurityFindings
-                  repositoryId={selectedRepo.id}
-                  repoUrl={selectedRepo.repoUrl}
-                  defaultBranch="main"
-                />
-              )}
+              {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
               {activeTab === 'automations' && selectedRepo && (
                 <AutomationsTab repositoryId={selectedRepo.id} />
               )}
@@ -1404,8 +1249,8 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
       onClick={onClick}
       className={`
          px-4 py-3 flex items-center gap-2 font-bold uppercase tracking-wider text-xs transition-all relative
-         ${active
-            ? 'text-apex-500 border-b-2 border-apex-500'
+         ${active 
+            ? 'text-apex-500 border-b-2 border-apex-500' 
             : 'text-slate-500 hover:text-slate-300 border-b-2 border-transparent'
          }
       `}
@@ -1415,30 +1260,6 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.Re
       {badge !== undefined && badge > 0 && (
          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
             active ? 'bg-apex-500 text-black' : 'bg-slate-800 text-slate-400'
-         }`}>
-            {badge}
-         </span>
-      )}
-   </button>
-);
-
-// Main dashboard tab button (for Repositories, Roadmap, CapEx)
-const MainDashboardTabButton: React.FC<{ active: boolean; onClick: () => void; icon: React.ReactNode; label: string; badge?: number }> = ({ active, onClick, icon, label, badge }) => (
-   <button
-      onClick={onClick}
-      className={`
-         px-5 py-3 flex items-center gap-2 font-bold uppercase tracking-wider text-sm transition-all relative
-         ${active
-            ? 'text-white bg-apex-500/10 border-b-2 border-apex-500'
-            : 'text-slate-400 hover:text-white hover:bg-slate-800/50 border-b-2 border-transparent'
-         }
-      `}
-   >
-      {icon}
-      <span>{label}</span>
-      {badge !== undefined && badge > 0 && (
-         <span className={`ml-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-            active ? 'bg-apex-500 text-black' : 'bg-slate-700 text-slate-300'
          }`}>
             {badge}
          </span>
@@ -1474,9 +1295,6 @@ const OverviewTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => (
       </div>
 
       <div className="col-span-12 lg:col-span-8 flex flex-col gap-6">
-         {/* Priority Focus - The #1 thing to fix */}
-         <PriorityFocus metrics={metrics} />
-
          <DashboardCard title="Critical Issues">
             <div className="space-y-4">
                <AnomalyRow icon={<Activity size={16} />} label="Circular Dependencies" value={metrics.issues.circularDependencies.length} danger={metrics.issues.circularDependencies.length > 0} />
@@ -1598,8 +1416,8 @@ const PackagesTab: React.FC<PackagesTabProps> = ({
    </div>
 );
 
-const InsightsTab: React.FC<{ metrics: BridgeMetrics; repoUrl: string }> = ({ metrics, repoUrl }) => {
-   const { score, codeQuality } = metrics;
+const InsightsTab: React.FC<{ metrics: BridgeMetrics }> = ({ metrics }) => {
+   const { score } = metrics;
    const details = score.details;
    const tasks = score.tasks || [];
    const stats = score.stats;
@@ -1693,21 +1511,6 @@ const InsightsTab: React.FC<{ metrics: BridgeMetrics; repoUrl: string }> = ({ me
                />
             </div>
          </DashboardCard>
-
-         {/* Code Quality Issues - TODOs and Console Logs */}
-         {codeQuality && (
-            <DashboardCard title="Code Quality Issues">
-               <div className="p-4">
-                  <CodeIssues
-                     todoItems={codeQuality.todoItems}
-                     consoleLogItems={codeQuality.consoleLogItems}
-                     todoCount={codeQuality.todoCount || 0}
-                     consoleLogCount={codeQuality.consoleLogCount || 0}
-                     repoUrl={repoUrl}
-                  />
-               </div>
-            </DashboardCard>
-         )}
       </div>
    );
 };

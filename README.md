@@ -47,22 +47,10 @@ Report issues at [github.com/cmccoy02/bridge-console/issues](https://github.com/
 ## Development
 
 ```bash
-# Development (runs Electron with hot-reload)
-npm run dev        # Start server + vite + electron
-
-# Web-only development (without Electron)
-npm run dev:web    # Start server + vite only
-
-# Production build
-npm run build      # Build and package Electron app (requires 16GB+ RAM)
-npm run build:web  # Build web version only
-
-# Other commands
-npm start          # Run pre-built Electron app
+npm start          # Electron app with backend
+npm run dev        # Web frontend only (port 3000)
 npm run server     # Backend only (port 3001)
 ```
-
-**Note:** Building the Electron app requires significant RAM (16GB+). See [BUILD-NOTES.md](BUILD-NOTES.md) for details and workarounds.
 
 ## License
 

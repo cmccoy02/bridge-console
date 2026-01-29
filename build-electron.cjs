@@ -8,11 +8,10 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
-// Set memory limit to 16GB (Electron packaging requires significant memory for large projects)
-const memoryLimit = process.env.BUILD_MEMORY_LIMIT || '16384';
-process.env.NODE_OPTIONS = `--max-old-space-size=${memoryLimit}`;
+// Set memory limit
+process.env.NODE_OPTIONS = '--max-old-space-size=8192';
 
-console.log(`Building Electron app with ${Math.round(memoryLimit/1024)}GB memory limit...\n`);
+console.log('Building Electron app with 8GB memory limit...\n');
 
 // Get platform argument if provided
 const args = process.argv.slice(2);

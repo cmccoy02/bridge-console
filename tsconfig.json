@@ -16,7 +16,7 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
+    "allowJs": false,
     "jsx": "react-jsx",
     "paths": {
       "@/*": [
@@ -25,5 +25,23 @@
     },
     "allowImportingTsExtensions": true,
     "noEmit": true
-  }
+  },
+  "include": [
+    "*.ts",
+    "*.tsx",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "utils/**/*.ts",
+    "data/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "server",
+    "electron",
+    "temp_scans",
+    "temp_updates",
+    "release",
+    "build"
+  ]
 }

@@ -6,17 +6,24 @@
   "main": "electron/main.js",
   "author": "Bridge Team",
   "description": "Technical Debt Management Platform",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"vite\" \"wait-on http://localhost:3000 http://localhost:3001/api/health && electron .\" --names \"SERVER,VITE,ELECTRON\" --prefix-colors \"blue,magenta,green\"",
-    "dev:web": "concurrently \"npm run server\" \"vite\" --names \"SERVER,VITE\" --prefix-colors \"blue,magenta\"",
-    "build": "tsc && vite build && node build-electron.cjs",
-    "build:web": "tsc && vite build",
-    "build:mac": "tsc && vite build && node build-electron.cjs --mac",
-    "build:win": "tsc && vite build && node build-electron.cjs --win",
-    "build:linux": "tsc && vite build && node build-electron.cjs --linux",
+    "dev": "vite",
+    "dev:web": "concurrently \"npm run server\" \"npm run dev\" --names \"SERVER,VITE\" --prefix-colors \"blue,magenta\"",
+    "dev:electron": "concurrently \"npm run server\" \"npm run dev\" \"wait-on http://localhost:3000 http://localhost:3001/api/health && electron .\" --names \"SERVER,VITE,ELECTRON\" --prefix-colors \"blue,magenta,green\"",
+    "build": "NODE_OPTIONS='--max-old-space-size=4096' vite build",
+    "build:check": "tsc --noEmit",
+    "build:full": "npm run build:check && npm run build",
+    "build:electron": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder",
+    "build:mac": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder --mac",
+    "build:win": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder --win",
+    "build:linux": "npm run build && NODE_OPTIONS='--max-old-space-size=8192' electron-builder --linux",
     "preview": "vite preview",
     "server": "node server/index.js",
-    "start": "electron .",
+    "start": "node server/index.js",
+    "start:electron": "electron .",
     "test:api": "node test-api.js",
     "cleanup": "node cleanup-temp.js",
     "migrate": "node migrate-db.js",
@@ -52,7 +59,6 @@
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.16",
     "concurrently": "^9.2.1",
-    "cross-env": "^10.1.0",
     "electron": "^40.0.0",
     "electron-builder": "^26.4.0",
     "postcss": "^8.4.31",
@@ -65,12 +71,6 @@
   "build": {
     "appId": "com.bridge.console",
     "productName": "Bridge",
-    "protocols": [
-      {
-        "name": "Bridge OAuth",
-        "schemes": ["bridge"]
-      }
-    ],
     "directories": {
       "buildResources": "build",
       "output": "release"
@@ -80,9 +80,6 @@
       "node_modules/sqlite3/**/*",
       "server/**/*"
     ],
-    "nodeGypRebuild": false,
-    "buildDependenciesFromSource": false,
-    "npmRebuild": true,
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -95,14 +92,7 @@
       "!**/tests/**",
       "!**/*.md",
       "!**/LICENSE*",
-      "!**/CHANGELOG*",
-      "!temp_scans/**",
-      "!temp_updates/**",
-      "!.git/**",
-      "!.vscode/**",
-      "!.cursor/**",
-      "!*.sqlite",
-      "!*.log"
+      "!**/CHANGELOG*"
     ],
     "extraResources": [
       {
@@ -115,17 +105,12 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": "dir",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "extendInfo": {
-        "CFBundleURLTypes": [
-          {
-            "CFBundleURLName": "Bridge OAuth",
-            "CFBundleURLSchemes": ["bridge"]
-          }
-        ]
-      }
+      "gatekeeperAssess": false
     },
     "win": {
       "target": [

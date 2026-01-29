@@ -39,12 +39,23 @@ export default defineConfig({
   build: {
     // Electron needs relative paths for assets
     assetsDir: 'assets',
+    // Reduce memory usage during build
+    minify: 'esbuild',
+    sourcemap: false,
+    // Increase chunk size warning limit
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         // Ensure consistent naming for production
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash].[ext]'
+        assetFileNames: 'assets/[name]-[hash].[ext]',
+        // Manual chunks to reduce bundle size
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'chart-vendor': ['recharts'],
+          'icons': ['lucide-react']
+        }
       }
     }
   }
