@@ -1,0 +1,23 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacks]
+# Use Node 22 to satisfy all package requirements
+nixPkgs = ["nodejs_22", "npm"]
+
+# Install all deps but skip native rebuilds (we use PostgreSQL in production, not sqlite)
+installCmd = "npm ci --omit=dev --ignore-scripts"
+
+# No build step needed - we just run the server
+buildCmd = "echo 'Server-only deployment - no build needed'"
+
+[deploy]
+# Start the Express server
+startCommand = "node server/index.js"
+
+# Health check endpoint
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+
+[deploy.env]
+NODE_ENV = "production"
