@@ -64,34 +64,184 @@ app.get('/api/auth/github', (req, res) => {
       demoMode: true,
       message: 'GitHub OAuth not configured. Using demo mode.'
     });
-
   }
 
-  // Allow Electron to pass a custom redirect URI (e.g., bridge://auth/callback)
-  const redirectUri = req.query.redirect_uri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:3000/auth/callback';
+  // Get platform from query (electron or web)
+  const platform = req.query.platform || 'web';
+  
+  // Use the configured redirect URI
+  const redirectUri = process.env.GITHUB_REDIRECT_URI || 'http://localhost:3001/api/auth/electron-callback';
+  
   // Scopes: repo (access repos), read:user (read user data), read:org (read org membership), user:email (read email)
   const scope = 'repo read:user read:org user:email';
+  
+  // Pass platform through state so we know where to redirect after auth
+  const state = `platform:${platform}`;
 
-  const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`;
+  const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
 
+  console.log(`[Auth] Generated auth URL for ${platform}`);
+  
   res.json({ authUrl });
 });
 
-// GitHub OAuth - GET callback for Electron (redirects to bridge:// protocol)
-app.get('/api/auth/electron-callback', (req, res) => {
-  const { code, error, error_description } = req.query;
+// Temporary auth tokens for cross-domain OAuth (web only)
+const pendingWebAuthTokens = new Map();
+
+// Clean up old tokens every 5 minutes
+setInterval(() => {
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  for (const [token, data] of pendingWebAuthTokens.entries()) {
+    if (data.createdAt < fiveMinutesAgo) {
+      pendingWebAuthTokens.delete(token);
+    }
+  }
+}, 5 * 60 * 1000);
+
+// GitHub OAuth - GET callback (handles both Electron and Web)
+app.get('/api/auth/electron-callback', async (req, res) => {
+  const { code, error, error_description, state } = req.query;
+  
+  // Determine if this is from Electron or Web based on state parameter
+  const isElectron = state?.includes('electron');
+  
+  // Get the frontend URL for web redirects
+  const frontendUrl = process.env.FRONTEND_URL || 
+    (process.env.ALLOWED_ORIGINS?.split(',')[0]) || 
+    'http://localhost:3000';
 
   if (error) {
-    // Redirect to bridge:// with error
-    return res.redirect(`bridge://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(error_description || '')}`);
+    if (isElectron) {
+      return res.redirect(`bridge://auth/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(error_description || '')}`);
+    } else {
+      return res.redirect(`${frontendUrl}?auth_error=${encodeURIComponent(error)}`);
+    }
   }
 
-  if (code) {
-    // Redirect to bridge:// with the code
-    return res.redirect(`bridge://auth/callback?code=${encodeURIComponent(code)}`);
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
   }
 
-  res.status(400).send('Missing authorization code');
+  try {
+    const clientId = process.env.GITHUB_CLIENT_ID;
+    const clientSecret = process.env.GITHUB_CLIENT_SECRET;
+    
+    if (!clientId || !clientSecret) {
+      throw new Error('GitHub OAuth not configured');
+    }
+
+    // Exchange code for access token
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        code
+      })
+    });
+
+    const tokenData = await tokenResponse.json();
+    
+    if (tokenData.error) {
+      throw new Error(tokenData.error_description || tokenData.error);
+    }
+
+    // Get user info from GitHub
+    const userResponse = await fetch('https://api.github.com/user', {
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'Accept': 'application/vnd.github.v3+json'
+      }
+    });
+
+    const githubUser = await userResponse.json();
+
+    // Save or update user in database
+    const db = await getDb();
+    
+    let user = await db.get('SELECT * FROM users WHERE "githubId" = ?', [String(githubUser.id)]);
+    
+    if (user) {
+      await db.run(
+        'UPDATE users SET "accessToken" = ?, "lastLoginAt" = CURRENT_TIMESTAMP WHERE id = ?',
+        [tokenData.access_token, user.id]
+      );
+    } else {
+      const result = await db.run(
+        'INSERT INTO users ("githubId", username, email, "avatarUrl", "accessToken") VALUES (?, ?, ?, ?, ?)',
+        [String(githubUser.id), githubUser.login, githubUser.email, githubUser.avatar_url, tokenData.access_token]
+      );
+      user = { id: result.lastID };
+    }
+
+    console.log(`[Auth] User ${githubUser.login} authenticated successfully (${isElectron ? 'Electron' : 'Web'})`);
+
+    if (isElectron) {
+      // Electron: set cookie and redirect to bridge:// protocol
+      const token = generateJWT(user.id);
+      setAuthCookie(res, token);
+      return res.redirect(`bridge://auth/callback?code=${encodeURIComponent(code)}`);
+    } else {
+      // Web: Generate a temporary token and redirect with it
+      // The frontend will exchange this token for a session cookie
+      const crypto = await import('crypto');
+      const tempToken = crypto.randomBytes(32).toString('hex');
+      
+      pendingWebAuthTokens.set(tempToken, {
+        userId: user.id,
+        username: githubUser.login,
+        email: githubUser.email,
+        avatarUrl: githubUser.avatar_url,
+        createdAt: Date.now()
+      });
+      
+      return res.redirect(`${frontendUrl}?auth_token=${tempToken}`);
+    }
+
+  } catch (err) {
+    console.error('[Auth] OAuth callback error:', err);
+    
+    if (isElectron) {
+      return res.redirect(`bridge://auth/callback?error=${encodeURIComponent('auth_failed')}&error_description=${encodeURIComponent(err.message)}`);
+    } else {
+      return res.redirect(`${frontendUrl}?auth_error=${encodeURIComponent(err.message)}`);
+    }
+  }
+});
+
+// Exchange temporary auth token for session (web only)
+app.post('/api/auth/exchange-token', async (req, res) => {
+  const { token } = req.body;
+  
+  if (!token) {
+    return res.status(400).json({ error: 'Token required' });
+  }
+  
+  const authData = pendingWebAuthTokens.get(token);
+  
+  if (!authData) {
+    return res.status(400).json({ error: 'Invalid or expired token' });
+  }
+  
+  // Remove the token (one-time use)
+  pendingWebAuthTokens.delete(token);
+  
+  // Generate JWT and set cookie
+  const jwtToken = generateJWT(authData.userId);
+  setAuthCookie(res, jwtToken);
+  
+  console.log(`[Auth] Token exchanged for user ${authData.username}`);
+  
+  res.json({
+    id: authData.userId,
+    username: authData.username,
+    email: authData.email,
+    avatarUrl: authData.avatarUrl
+  });
 });
 
 // GitHub OAuth - Handle callback

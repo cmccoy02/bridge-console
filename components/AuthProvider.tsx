@@ -50,9 +50,55 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
 
-  // Check for existing session on mount
+  // Check for auth token in URL (web OAuth callback) or existing session
   useEffect(() => {
-    checkSession();
+    const handleAuth = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const authToken = urlParams.get('auth_token');
+      const authError = urlParams.get('auth_error');
+      
+      // Clear URL params
+      if (authToken || authError) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      
+      if (authError) {
+        console.error('[Auth] OAuth error:', authError);
+        alert(`Authentication failed: ${authError}`);
+        setIsLoading(false);
+        return;
+      }
+      
+      if (authToken) {
+        console.log('[Auth] Found auth token, exchanging for session...');
+        try {
+          const res = await fetch(`${API_URL}/api/auth/exchange-token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ token: authToken })
+          });
+          
+          if (res.ok) {
+            const userData = await res.json();
+            console.log('[Auth] Token exchanged, user:', userData.username);
+            setUser(userData);
+            setIsLoading(false);
+            return;
+          } else {
+            const error = await res.json();
+            console.error('[Auth] Token exchange failed:', error);
+          }
+        } catch (error) {
+          console.error('[Auth] Token exchange error:', error);
+        }
+      }
+      
+      // No token in URL, check for existing session
+      checkSession();
+    };
+    
+    handleAuth();
   }, []);
 
   // Listen for OAuth callbacks from Electron
