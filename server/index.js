@@ -8,14 +8,22 @@ import { processUpdate } from './update-worker.js';
 import { processCleanup } from './cleanup-worker.js';
 import { generateJWT, setAuthCookie, clearAuthCookie, authMiddleware } from './auth.js';
 import { getUserRepos, getUserOrgs, getOrgRepos } from './github.js';
+// Use JavaScript security scanner (works without Python)
 import {
-  isSecurityAgentAvailable,
-  runSecurityScan,
+  runSecurityScanJS,
+  isSecurityScannerAvailable,
+  getSupportedLanguagesJS as getSupportedLanguages,
+  getSeverityColorJS as getSeverityColor,
+  getSeverityBadgeClassJS as getSeverityBadgeClass,
+} from './security-scanner-js.js';
+// Legacy Python scanner (optional, for advanced analysis)
+import {
+  isSecurityAgentAvailable as isPythonSecurityAvailable,
+  runSecurityScan as runPythonSecurityScan,
   generateAIFix,
-  getSupportedLanguages,
-  getSeverityColor,
-  getSeverityBadgeClass,
 } from './security-scanner.js';
+// Automation scheduler
+import { startScheduler, stopScheduler, getSchedulerStatus, triggerManualCheck } from './scheduler.js';
 
 dotenv.config();
 
@@ -1711,7 +1719,7 @@ async function processSecurityScan(scanId, repo, generateFixes, db, userToken = 
       [JSON.stringify({ step: 'scanning', percent: 30, message: 'Running security scan...' }), scanId]
     );
 
-    // Run the security scan
+    // Run the security scan using JavaScript scanner
     const progressCallback = async (step, percent, message) => {
       await db.run(
         `UPDATE security_scans SET progress = ? WHERE id = ?`,
@@ -1719,7 +1727,8 @@ async function processSecurityScan(scanId, repo, generateFixes, db, userToken = 
       );
     };
 
-    const results = await runSecurityScan(tempDir, { generateFixes }, progressCallback);
+    // Use JavaScript-based scanner (works on all platforms without Python)
+    const results = await runSecurityScanJS(tempDir, { generateFixes }, progressCallback);
 
     // Update with final results
     await db.run(
@@ -1759,6 +1768,24 @@ async function processSecurityScan(scanId, repo, generateFixes, db, userToken = 
   }
 }
 
+// ===== SCHEDULER ENDPOINTS =====
+
+// Get scheduler status
+app.get('/api/scheduler/status', authMiddleware, async (req, res) => {
+  const status = getSchedulerStatus();
+  res.json(status);
+});
+
+// Manually trigger scheduler check (admin/testing)
+app.post('/api/scheduler/trigger', authMiddleware, async (req, res) => {
+  try {
+    await triggerManualCheck();
+    res.json({ success: true, message: 'Scheduler check triggered' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Catch-all for 404s - BEFORE error handler
 app.use('/api/*', (req, res) => {
   console.error('[Bridge Server] 404 - Route not found:', req.method, req.originalUrl);
@@ -1789,4 +1816,20 @@ app.listen(PORT, () => {
   console.log(`   GitHub Token: ${process.env.GITHUB_TOKEN ? '[OK] Loaded' : '[X] Missing'}`);
   console.log(`   Gemini API Key: ${process.env.GEMINI_API_KEY ? '[OK] Loaded' : '[X] Missing'}`);
   console.log(`   Ready to accept requests\n`);
+
+  // Start the automation scheduler
+  startScheduler();
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('[Bridge] Received SIGTERM, shutting down gracefully...');
+  stopScheduler();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('[Bridge] Received SIGINT, shutting down gracefully...');
+  stopScheduler();
+  process.exit(0);
 });

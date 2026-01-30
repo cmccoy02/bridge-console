@@ -301,8 +301,10 @@ ${validationSection}### Testing Checklist
 }
 
 export async function processUpdate(jobId, repository, accessToken, db) {
-  // Use TEMP_UPDATES_DIR env var if set (for Electron), otherwise default
-  const tempBase = process.env.TEMP_UPDATES_DIR || path.resolve('./temp_updates');
+  // Use TEMP_UPDATES_DIR env var if set, otherwise use system temp directory
+  // This ensures it works in all environments (local, Railway, etc.)
+  const os = await import('os');
+  const tempBase = process.env.TEMP_UPDATES_DIR || path.join(os.tmpdir(), 'bridge-updates');
   const TEMP_DIR = path.join(tempBase, String(jobId));
   const startTime = Date.now();
 

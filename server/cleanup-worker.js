@@ -57,7 +57,9 @@ async function appendLog(db, jobId, message) {
 }
 
 export async function processCleanup(jobId, repository, packagesToRemove, accessToken, db) {
-  const tempBase = process.env.TEMP_UPDATES_DIR || path.resolve('./temp_updates');
+  // Use TEMP_UPDATES_DIR env var if set, otherwise use system temp directory
+  const os = await import('os');
+  const tempBase = process.env.TEMP_UPDATES_DIR || path.join(os.tmpdir(), 'bridge-cleanup');
   const TEMP_DIR = path.join(tempBase, `cleanup-${jobId}`);
   const startTime = Date.now();
 
