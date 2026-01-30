@@ -18,16 +18,24 @@ export function verifyJWT(token) {
 }
 
 export function setAuthCookie(res, token) {
+  const isProduction = process.env.NODE_ENV === 'production';
+  
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: isProduction, // Must be true for sameSite: 'none'
+    sameSite: isProduction ? 'none' : 'lax', // 'none' allows cross-origin requests
     maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
   });
 }
 
 export function clearAuthCookie(res) {
-  res.clearCookie(COOKIE_NAME);
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax'
+  });
 }
 
 export async function authMiddleware(req, res, next) {
