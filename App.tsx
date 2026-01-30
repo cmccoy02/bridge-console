@@ -46,18 +46,18 @@ import {
   ToggleLeft,
   ToggleRight,
   Check,
-  Shield,
-  DollarSign,
-  Map
+  Shield
+  // DollarSign, Map - moved to central dashboard
 } from 'lucide-react';
 import GitHubBrowser from './components/GitHubBrowser';
 import SecurityFindings from './components/SecurityFindings';
-import SoftwareCapitalization from './components/SoftwareCapitalization';
-import Roadmap from './components/Roadmap';
+// CapEx and Roadmap moved to central dashboard
+// import SoftwareCapitalization from './components/SoftwareCapitalization';
+// import Roadmap from './components/Roadmap';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations' | 'capex' | 'roadmap';
+type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
 type AddRepoMode = 'url' | 'browse';
 
@@ -1103,13 +1103,6 @@ const AppContent: React.FC = () => {
                     badge={metrics.aiAnalysis?.insights?.length || 0}
                  />
                  <TabButton
-                    active={activeTab === 'automations'}
-                    onClick={() => setActiveTab('automations')}
-                    icon={<Bot size={16} />}
-                    label="Automations"
-                    badge={0}
-                 />
-                 <TabButton
                     active={activeTab === 'security'}
                     onClick={() => setActiveTab('security')}
                     icon={<Shield size={16} />}
@@ -1117,17 +1110,10 @@ const AppContent: React.FC = () => {
                     badge={0}
                  />
                  <TabButton
-                    active={activeTab === 'capex'}
-                    onClick={() => setActiveTab('capex')}
-                    icon={<DollarSign size={16} />}
-                    label="CapEx"
-                    badge={0}
-                 />
-                 <TabButton
-                    active={activeTab === 'roadmap'}
-                    onClick={() => setActiveTab('roadmap')}
-                    icon={<Map size={16} />}
-                    label="Roadmap"
+                    active={activeTab === 'automations'}
+                    onClick={() => setActiveTab('automations')}
+                    icon={<Bot size={16} />}
+                    label="Automations"
                     badge={0}
                  />
               </div>
@@ -1205,10 +1191,6 @@ const AppContent: React.FC = () => {
                   />
                 </>
               )}
-              {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
-              {activeTab === 'automations' && selectedRepo && (
-                <AutomationsTab repositoryId={selectedRepo.id} />
-              )}
               {activeTab === 'security' && selectedRepo && metrics && (
                 <SecurityFindings
                   scanId={currentScanId}
@@ -1217,11 +1199,9 @@ const AppContent: React.FC = () => {
                   defaultBranch="main"
                 />
               )}
-              {activeTab === 'capex' && selectedRepo && (
-                <SoftwareCapitalization repositoryId={selectedRepo.id} />
-              )}
-              {activeTab === 'roadmap' && (
-                <Roadmap />
+              {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
+              {activeTab === 'automations' && selectedRepo && (
+                <AutomationsTab repositoryId={selectedRepo.id} />
               )}
 
               {/* Scan History */}
