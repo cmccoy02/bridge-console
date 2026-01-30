@@ -45,13 +45,19 @@ import {
   FileText,
   ToggleLeft,
   ToggleRight,
-  Check
+  Check,
+  Shield,
+  DollarSign,
+  Map
 } from 'lucide-react';
 import GitHubBrowser from './components/GitHubBrowser';
+import SecurityFindings from './components/SecurityFindings';
+import SoftwareCapitalization from './components/SoftwareCapitalization';
+import Roadmap from './components/Roadmap';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-type TabType = 'overview' | 'packages' | 'insights' | 'automations';
+type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations' | 'capex' | 'roadmap';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
 type AddRepoMode = 'url' | 'browse';
 
@@ -1103,6 +1109,27 @@ const AppContent: React.FC = () => {
                     label="Automations"
                     badge={0}
                  />
+                 <TabButton
+                    active={activeTab === 'security'}
+                    onClick={() => setActiveTab('security')}
+                    icon={<Shield size={16} />}
+                    label="Security"
+                    badge={0}
+                 />
+                 <TabButton
+                    active={activeTab === 'capex'}
+                    onClick={() => setActiveTab('capex')}
+                    icon={<DollarSign size={16} />}
+                    label="CapEx"
+                    badge={0}
+                 />
+                 <TabButton
+                    active={activeTab === 'roadmap'}
+                    onClick={() => setActiveTab('roadmap')}
+                    icon={<Map size={16} />}
+                    label="Roadmap"
+                    badge={0}
+                 />
               </div>
 
               {/* Tab Content */}
@@ -1181,6 +1208,20 @@ const AppContent: React.FC = () => {
               {activeTab === 'insights' && <InsightsTab metrics={metrics} />}
               {activeTab === 'automations' && selectedRepo && (
                 <AutomationsTab repositoryId={selectedRepo.id} />
+              )}
+              {activeTab === 'security' && selectedRepo && metrics && (
+                <SecurityFindings
+                  scanId={currentScanId}
+                  repositoryId={selectedRepo.id}
+                  repoUrl={selectedRepo.repoUrl}
+                  defaultBranch="main"
+                />
+              )}
+              {activeTab === 'capex' && selectedRepo && (
+                <SoftwareCapitalization repositoryId={selectedRepo.id} />
+              )}
+              {activeTab === 'roadmap' && (
+                <Roadmap />
               )}
 
               {/* Scan History */}
