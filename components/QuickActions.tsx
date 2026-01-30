@@ -19,7 +19,7 @@ interface QuickActionsProps {
   isCleaningUp?: boolean;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiPost } from '../utils/api';
 
 const QuickActions: React.FC<QuickActionsProps> = ({
   repositoryId,
@@ -60,11 +60,8 @@ const QuickActions: React.FC<QuickActionsProps> = ({
     setBranchDeleteResult(null);
 
     try {
-      const response = await fetch(`${API_URL}/api/repositories/${repositoryId}/branches/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ branches: Array.from(selectedBranches) })
+      const response = await apiPost(`/api/repositories/${repositoryId}/branches/delete`, {
+        branches: Array.from(selectedBranches)
       });
 
       const data = await response.json();

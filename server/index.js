@@ -230,17 +230,20 @@ app.post('/api/auth/exchange-token', async (req, res) => {
   // Remove the token (one-time use)
   pendingWebAuthTokens.delete(token);
   
-  // Generate JWT and set cookie
+  // Generate JWT and set cookie (for same-domain scenarios)
   const jwtToken = generateJWT(authData.userId);
   setAuthCookie(res, jwtToken);
   
   console.log(`[Auth] Token exchanged for user ${authData.username}`);
   
+  // Return the JWT token so frontend can use it for Authorization header
+  // This is needed for cross-domain requests where cookies are blocked
   res.json({
     id: authData.userId,
     username: authData.username,
     email: authData.email,
-    avatarUrl: authData.avatarUrl
+    avatarUrl: authData.avatarUrl,
+    accessToken: jwtToken  // Frontend will store this for API calls
   });
 });
 

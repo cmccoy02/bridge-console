@@ -12,8 +12,7 @@ import {
   Search,
   RefreshCw
 } from 'lucide-react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiGet } from '../utils/api';
 
 interface GitHubRepo {
   id: number;
@@ -99,9 +98,7 @@ const GitHubBrowser: React.FC<GitHubBrowserProps> = ({ onConnect, isDemo }) => {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/github/repos?page=${loadPage}&perPage=30`, {
-        credentials: 'include'
-      });
+      const res = await apiGet(`/api/github/repos?page=${loadPage}&perPage=30`);
 
       if (!res.ok) {
         const data = await res.json();
@@ -130,9 +127,7 @@ const GitHubBrowser: React.FC<GitHubBrowserProps> = ({ onConnect, isDemo }) => {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/github/orgs`, {
-        credentials: 'include'
-      });
+      const res = await apiGet('/api/github/orgs');
 
       if (!res.ok) {
         const data = await res.json();
@@ -161,9 +156,7 @@ const GitHubBrowser: React.FC<GitHubBrowserProps> = ({ onConnect, isDemo }) => {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/github/orgs/${orgName}/repos?page=${loadPage}&perPage=30`, {
-        credentials: 'include'
-      });
+      const res = await apiGet(`/api/github/orgs/${orgName}/repos?page=${loadPage}&perPage=30`);
 
       if (!res.ok) {
         const data = await res.json();

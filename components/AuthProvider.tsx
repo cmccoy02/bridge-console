@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
+// Token storage key for cross-domain auth
+const AUTH_TOKEN_KEY = 'bridge_auth_token';
+
 // Check if running in Electron
 const isElectron = typeof window !== 'undefined' && (window as any).bridge?.isElectron;
 
@@ -33,9 +36,46 @@ interface AuthContextType {
   enterPreviewMode: () => void;
   exitPreviewMode: () => void;
   handleOAuthCallback: (code: string) => Promise<void>;
+  getAuthHeaders: () => Record<string, string>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// Helper to get stored auth token
+const getStoredToken = (): string | null => {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+// Helper to store auth token
+const storeToken = (token: string): void => {
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch (e) {
+    console.warn('[Auth] Failed to store token:', e);
+  }
+};
+
+// Helper to clear stored auth token
+const clearStoredToken = (): void => {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    // Ignore
+  }
+};
+
+// Export helper to get auth headers for API calls
+export const getAuthHeaders = (): Record<string, string> => {
+  const token = getStoredToken();
+  if (token) {
+    return { 'Authorization': `Bearer ${token}` };
+  }
+  return {};
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -82,6 +122,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (res.ok) {
             const userData = await res.json();
             console.log('[Auth] Token exchanged, user:', userData.username);
+            // Store the JWT for subsequent API calls (needed for cross-domain)
+            if (userData.accessToken) {
+              storeToken(userData.accessToken);
+              console.log('[Auth] Stored auth token for API calls');
+            }
             setUser(userData);
             setIsLoading(false);
             return;
@@ -130,8 +175,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const checkSession = async () => {
     try {
+      // Include Authorization header if we have a stored token
+      const headers: Record<string, string> = {};
+      const storedToken = getStoredToken();
+      if (storedToken) {
+        headers['Authorization'] = `Bearer ${storedToken}`;
+      }
+      
       const res = await fetch(`${API_URL}/api/auth/me`, {
-        credentials: 'include'
+        credentials: 'include',
+        headers
       });
 
       if (res.ok) {
@@ -140,6 +193,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(userData);
       } else {
         console.log('[Auth] No active session');
+        // Clear stored token if session check fails
+        clearStoredToken();
       }
     } catch (error) {
       console.error('Session check error:', error);
@@ -260,15 +315,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const logout = async () => {
     try {
+      const headers = getAuthHeaders();
       await fetch(`${API_URL}/api/auth/logout`, {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        headers
       });
 
+      // Clear stored auth token
+      clearStoredToken();
       setUser(null);
       setIsPreviewMode(false);
     } catch (error) {
       console.error('Logout error:', error);
+      clearStoredToken();
       setUser(null);
     }
   };
@@ -282,7 +342,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       logout,
       enterPreviewMode,
       exitPreviewMode,
-      handleOAuthCallback
+      handleOAuthCallback,
+      getAuthHeaders
     }}>
       {children}
     </AuthContext.Provider>

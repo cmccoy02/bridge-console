@@ -17,6 +17,7 @@ import ActionableTasks from './components/ActionableTasks';
 import WelcomeScreen from './components/WelcomeScreen';
 import ConnectionError from './components/ConnectionError';
 import { validateGitHubUrl, type ValidationResult } from './utils/validation';
+import { apiFetch, apiGet, apiPost, apiDelete, API_URL } from './utils/api';
 import mockData from './mock-bridge-metrics.json';
 import {
   Terminal,
@@ -54,8 +55,6 @@ import SecurityFindings from './components/SecurityFindings';
 // CapEx and Roadmap moved to central dashboard
 // import SoftwareCapitalization from './components/SoftwareCapitalization';
 // import Roadmap from './components/Roadmap';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 type TabType = 'overview' | 'packages' | 'security' | 'insights' | 'automations';
 type ViewMode = 'repositories' | 'repository-detail' | 'add-repository';
@@ -223,9 +222,7 @@ const AppContent: React.FC = () => {
     setIsLoadingRepos(true);
     try {
       console.log('[Bridge] Loading repositories...');
-      const res = await fetch(`${API_URL}/api/repositories`, {
-        credentials: 'include'
-      });
+      const res = await apiGet('/api/repositories');
       console.log('[Bridge] Load repositories status:', res.status);
 
       if (res.ok) {
@@ -253,10 +250,7 @@ const AppContent: React.FC = () => {
   // Disconnect/remove a repository
   const disconnectRepository = async (repoId: number) => {
     try {
-      const res = await fetch(`${API_URL}/api/repositories/${repoId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
+      const res = await apiDelete(`/api/repositories/${repoId}`);
 
       if (res.ok) {
         // Remove from local state
@@ -279,9 +273,7 @@ const AppContent: React.FC = () => {
 
     const interval = setInterval(async () => {
         try {
-            const res = await fetch(`${API_URL}/api/scan/${scanId}`, {
-              credentials: 'include'
-            });
+            const res = await apiGet(`/api/scan/${scanId}`);
             
             if (!res.ok) {
               console.error('[Bridge] Poll failed with status:', res.status);
@@ -342,12 +334,7 @@ const AppContent: React.FC = () => {
 
     try {
         console.log('[Bridge] Sending POST request to /api/scan');
-        const res = await fetch(`${API_URL}/api/scan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ repoUrl: urlToScan, repositoryId: repoId })
-        });
+        const res = await apiPost('/api/scan', { repoUrl: urlToScan, repositoryId: repoId });
         
         console.log('[Bridge] Response status:', res.status);
         
@@ -384,10 +371,7 @@ const AppContent: React.FC = () => {
 
     try {
       console.log('[Bridge] Triggering update for:', selectedRepo.name);
-      const res = await fetch(`${API_URL}/api/repositories/${selectedRepo.id}/update`, {
-        method: 'POST',
-        credentials: 'include'
-      });
+      const res = await apiPost(`/api/repositories/${selectedRepo.id}/update`);
 
       if (!res.ok) {
         const errorData = await res.json();
@@ -414,9 +398,7 @@ const AppContent: React.FC = () => {
 
     updatePollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/update-jobs/${jobId}`, {
-          credentials: 'include'
-        });
+        const res = await apiGet(`/api/update-jobs/${jobId}`);
 
         if (!res.ok) {
           clearInterval(updatePollRef.current!);
@@ -460,12 +442,7 @@ const AppContent: React.FC = () => {
 
     try {
       console.log('[Bridge] Triggering cleanup for:', selectedRepo.name, 'packages:', packages);
-      const res = await fetch(`${API_URL}/api/repositories/${selectedRepo.id}/cleanup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ packages })
-      });
+      const res = await apiPost(`/api/repositories/${selectedRepo.id}/cleanup`, { packages });
 
       if (!res.ok) {
         const errorData = await res.json();
@@ -486,9 +463,7 @@ const AppContent: React.FC = () => {
   const pollCleanupStatus = (jobId: number) => {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/cleanup-jobs/${jobId}`, {
-          credentials: 'include'
-        });
+        const res = await apiGet(`/api/cleanup-jobs/${jobId}`);
 
         if (!res.ok) {
           clearInterval(interval);
@@ -543,12 +518,7 @@ const AppContent: React.FC = () => {
     try {
       console.log('[Bridge] Adding repository:', normalizedUrl);
 
-      const res = await fetch(`${API_URL}/api/repositories`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ repoUrl: normalizedUrl })
-      });
+      const res = await apiPost('/api/repositories', { repoUrl: normalizedUrl });
 
       console.log('[Bridge] Add repository response status:', res.status);
       console.log('[Bridge] Response content-type:', res.headers.get('content-type'));
@@ -905,12 +875,7 @@ const AppContent: React.FC = () => {
                      <div className="relative mb-6">
                        <GitHubBrowser
                          onConnect={async (url) => {
-                           const res = await fetch(`${API_URL}/api/repositories`, {
-                             method: 'POST',
-                             headers: { 'Content-Type': 'application/json' },
-                             credentials: 'include',
-                             body: JSON.stringify({ repoUrl: url })
-                           });
+                           const res = await apiPost('/api/repositories', { repoUrl: url });
                            if (!res.ok) {
                              const data = await res.json();
                              throw new Error(data.error || 'Failed to connect');
@@ -1549,9 +1514,7 @@ const AutomationsTab: React.FC<{ repositoryId: number }> = ({ repositoryId }) =>
     const loadSettings = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch(`${API_URL}/api/repositories/${repositoryId}/automation-settings`, {
-          credentials: 'include'
-        });
+        const res = await apiGet(`/api/repositories/${repositoryId}/automation-settings`);
 
         if (res.ok) {
           const data = await res.json();
@@ -1578,10 +1541,9 @@ const AutomationsTab: React.FC<{ repositoryId: number }> = ({ repositoryId }) =>
       setError(null);
       setSaveSuccess(false);
 
-      const res = await fetch(`${API_URL}/api/repositories/${repositoryId}/automation-settings`, {
+      const res = await apiFetch(`/api/repositories/${repositoryId}/automation-settings`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(settings)
       });
 

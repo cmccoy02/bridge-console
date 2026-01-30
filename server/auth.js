@@ -39,7 +39,14 @@ export function clearAuthCookie(res) {
 }
 
 export async function authMiddleware(req, res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
+  // Try to get token from cookie first, then from Authorization header
+  let token = req.cookies?.[COOKIE_NAME];
+  
+  // Check Authorization header (for cross-domain requests where cookies are blocked)
+  const authHeader = req.headers.authorization;
+  if (!token && authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  }
 
   if (!token) {
     return res.status(401).json({ error: 'Not authenticated' });
@@ -70,7 +77,13 @@ export async function authMiddleware(req, res, next) {
 }
 
 export async function optionalAuthMiddleware(req, res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
+  // Try to get token from cookie first, then from Authorization header
+  let token = req.cookies?.[COOKIE_NAME];
+  
+  const authHeader = req.headers.authorization;
+  if (!token && authHeader?.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  }
 
   if (!token) {
     req.user = null;

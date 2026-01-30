@@ -83,7 +83,7 @@ interface SecurityFindingsProps {
   onScanStart?: () => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+import { apiGet, apiPost, apiFetch } from '../utils/api';
 
 const SecurityFindings: React.FC<SecurityFindingsProps> = ({
   scanId,
@@ -113,9 +113,7 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
 
     const pollStatus = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/security/scan/${currentScanId}`, {
-          credentials: 'include',
-        });
+        const response = await apiGet(`/api/security/scan/${currentScanId}`);
 
         if (!response.ok) throw new Error('Failed to fetch scan status');
 
@@ -151,12 +149,7 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
     setProgress(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/security/scan`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ repositoryId, generateFixes }),
-      });
+      const response = await apiPost('/api/security/scan', { repositoryId, generateFixes });
 
       if (!response.ok) {
         const data = await response.json();
@@ -179,12 +172,7 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
     setGeneratingFix(index);
 
     try {
-      const response = await fetch(`${API_BASE}/api/security/fix`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ finding }),
-      });
+      const response = await apiPost('/api/security/fix', { finding });
 
       if (!response.ok) {
         const data = await response.json();
@@ -214,9 +202,7 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
   // Poll for fix job status
   const pollFixJob = useCallback(async (jobId: number, findingIndex: number) => {
     try {
-      const response = await fetch(`${API_BASE}/api/security-fix-jobs/${jobId}`, {
-        credentials: 'include',
-      });
+      const response = await apiGet(`/api/security-fix-jobs/${jobId}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch fix job status');
@@ -251,15 +237,10 @@ const SecurityFindings: React.FC<SecurityFindingsProps> = ({
     setApplyingFix(index);
 
     try {
-      const response = await fetch(`${API_BASE}/api/security/fix-and-pr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          repositoryId,
-          finding,
-          securityScanId: currentScanId,
-        }),
+      const response = await apiPost('/api/security/fix-and-pr', {
+        repositoryId,
+        finding,
+        securityScanId: currentScanId,
       });
 
       if (!response.ok) {
