@@ -973,8 +973,11 @@ app.post('/api/scan', authMiddleware, async (req, res) => {
     const scanId = result.lastID;
     console.log('[Bridge Server] Created scan job:', scanId);
 
-    // Trigger Worker (Fire and Forget)
-    processScan(scanId, repoUrl, repoId, db).catch(err => {
+    // Get user's GitHub access token for authenticated operations
+    const userToken = req.user.accessToken;
+
+    // Trigger Worker (Fire and Forget) - pass user's token for repo access
+    processScan(scanId, repoUrl, repoId, db, userToken).catch(err => {
       console.error('[Bridge Server] Worker error:', err);
     });
 
@@ -1496,8 +1499,8 @@ app.post('/api/security/scan', authMiddleware, async (req, res) => {
     const scanId = result.lastID;
     console.log(`[Security Scanner] Created scan ${scanId} for ${repo.name}`);
 
-    // Start async security scan (fire and forget)
-    processSecurityScan(scanId, repo, generateFixes, db).catch(err => {
+    // Start async security scan (fire and forget) - pass user's token for repo access
+    processSecurityScan(scanId, repo, generateFixes, db, req.user.accessToken).catch(err => {
       console.error('[Security Scanner] Scan error:', err);
     });
 
@@ -1655,8 +1658,11 @@ app.get('/api/security/helpers', (req, res) => {
 });
 
 // Security scan worker function
-async function processSecurityScan(scanId, repo, generateFixes, db) {
+async function processSecurityScan(scanId, repo, generateFixes, db, userToken = null) {
   console.log(`[Security Scanner] Starting scan ${scanId} for ${repo.name}`);
+
+  // Use user's OAuth token if provided, fall back to env token
+  const githubToken = userToken || process.env.GITHUB_TOKEN;
 
   try {
     // Update status to processing
@@ -1684,9 +1690,17 @@ async function processSecurityScan(scanId, repo, generateFixes, db) {
       [JSON.stringify({ step: 'cloning', percent: 10, message: 'Cloning repository...' }), scanId]
     );
 
-    // Clone the repository
+    // Clone the repository with authentication
     const git = simpleGit();
-    await git.clone(repo.repoUrl, tempDir, ['--depth', '1']);
+    let cloneUrl = repo.repoUrl;
+    if (githubToken) {
+      // Convert to authenticated URL
+      cloneUrl = repo.repoUrl.replace(
+        'https://github.com',
+        `https://x-access-token:${githubToken}@github.com`
+      );
+    }
+    await git.clone(cloneUrl, tempDir, ['--depth', '1']);
 
     // Update progress
     await db.run(

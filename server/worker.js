@@ -7,10 +7,25 @@ import madge from 'madge';
 import ncu from 'npm-check-updates';
 import { glob } from 'glob';
 import depcheck from 'depcheck';
-import { getRepoMetadata } from './github.js';
+import { getRepoMetadata, getRepoMetadataWithToken } from './github.js';
 import { analyzeAndPrioritize } from './prioritization.js';
 import { calculateTechDebtScore } from './scoring.js';
 import { analyzeMultiLanguagePackages, detectPackageManagers } from './package-detection.js';
+
+// Helper to create authenticated clone URL
+function getAuthenticatedCloneUrl(repoUrl, token) {
+  if (!token) return repoUrl;
+
+  // Convert GitHub URL to authenticated format
+  // https://github.com/owner/repo -> https://x-access-token:TOKEN@github.com/owner/repo
+  const urlMatch = repoUrl.match(/github\.com[\/:]([^\/]+)\/([^\/\.]+)/);
+  if (urlMatch) {
+    const owner = urlMatch[1];
+    const repo = urlMatch[2].replace('.git', '');
+    return `https://x-access-token:${token}@github.com/${owner}/${repo}.git`;
+  }
+  return repoUrl;
+}
 
 const execPromise = util.promisify(exec);
 
@@ -48,37 +63,42 @@ async function updateProgress(db, scanId, phase, details = {}) {
   return progress;
 }
 
-export async function processScan(scanId, repoUrl, repositoryId, db) {
+export async function processScan(scanId, repoUrl, repositoryId, db, userToken = null) {
   // Use TEMP_SCANS_DIR env var if set (for Electron), otherwise default
   const tempBase = process.env.TEMP_SCANS_DIR || path.resolve('./temp_scans');
   const TEMP_DIR = path.join(tempBase, String(scanId));
   const startTime = Date.now();
-  
+
+  // Use user's OAuth token if provided, fall back to env token
+  const githubToken = userToken || process.env.GITHUB_TOKEN;
+
   try {
     console.log(`[Worker] Starting scan ${scanId} for ${repoUrl}`);
+    console.log(`[Worker] Using ${userToken ? 'user OAuth token' : 'environment GITHUB_TOKEN'}`);
     await updateProgress(db, scanId, SCAN_PHASES.INITIALIZING);
-    
+
     // Validate GitHub URL
     if (!repoUrl.includes('github.com')) {
       throw new Error('Invalid GitHub URL. Must contain github.com');
     }
-    
+
     // Clean up any existing temp dir from failed previous attempt
     if (await fs.pathExists(TEMP_DIR)) {
       console.log(`[Worker] Cleaning up existing temp directory`);
       await fs.remove(TEMP_DIR);
     }
-    
+
     // Extract Owner/Repo
     const urlParts = repoUrl.split('/');
     const repoName = urlParts.pop().replace('.git', '');
     const owner = urlParts.pop();
 
-    // 1. Clone
+    // 1. Clone (with authentication if token available)
     await updateProgress(db, scanId, SCAN_PHASES.CLONING);
     await fs.ensureDir(TEMP_DIR);
     const git = simpleGit();
-    await git.clone(repoUrl, TEMP_DIR);
+    const cloneUrl = getAuthenticatedCloneUrl(repoUrl, githubToken);
+    await git.clone(cloneUrl, TEMP_DIR);
     console.log(`[Worker] Cloned to ${TEMP_DIR}`);
 
     // NOTE: Repomix disabled - AI analysis is turned off, no need to compress codebase
@@ -448,7 +468,10 @@ export async function processScan(scanId, repoUrl, repositoryId, db) {
     // 4. Get GitHub metadata as fallback for language breakdown
     let languageBreakdown = {};
     try {
-      const githubMeta = await getRepoMetadata(owner, repoName);
+      // Use user's token for API calls
+      const githubMeta = githubToken
+        ? await getRepoMetadataWithToken(owner, repoName, githubToken)
+        : await getRepoMetadata(owner, repoName);
       languageBreakdown = githubMeta.languageBreakdown || {};
     } catch (err) {
       console.warn('[Worker] GitHub API failed, using file extension fallback');

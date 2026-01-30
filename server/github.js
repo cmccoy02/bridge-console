@@ -125,6 +125,59 @@ export async function getOrgRepos(accessToken, orgName, page = 1, perPage = 30) 
   }
 }
 
+// Get repo metadata using a specific access token (for user-authenticated requests)
+export async function getRepoMetadataWithToken(owner, repo, accessToken) {
+  const userClient = createUserClient(accessToken);
+  try {
+    // 1. Basic Info (Age, Size)
+    const { data: repoData } = await userClient.get(`/repos/${owner}/${repo}`);
+
+    // Calculate Age
+    const createdDate = new Date(repoData.created_at);
+    const now = new Date();
+    const ageInDays = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
+
+    // 2. Languages
+    const { data: langData } = await userClient.get(`/repos/${owner}/${repo}/languages`);
+
+    // 3. Branches & Dead Branches
+    const { data: branches } = await userClient.get(`/repos/${owner}/${repo}/branches?per_page=100`);
+
+    let deadBranches = 0;
+    const branchChecks = branches.map(async (branch) => {
+      try {
+        const { data: commitData } = await userClient.get(`/repos/${owner}/${repo}/commits/${branch.commit.sha}`);
+        const lastCommitDate = new Date(commitData.commit.author.date);
+        const diffDays = Math.floor((now - lastCommitDate) / (1000 * 60 * 60 * 24));
+        if (diffDays > 90) return 1;
+        return 0;
+      } catch (e) {
+        return 0;
+      }
+    });
+
+    const results = await Promise.all(branchChecks);
+    deadBranches = results.reduce((a, b) => a + b, 0);
+
+    return {
+      repoAgeDays: ageInDays,
+      languageBreakdown: langData,
+      branchCount: branches.length,
+      deadBranchCount: deadBranches
+    };
+
+  } catch (error) {
+    console.error('[GitHub] API Error (with token):', error.response?.data || error.message);
+    return {
+      repoAgeDays: 0,
+      languageBreakdown: {},
+      branchCount: 0,
+      deadBranchCount: 0
+    };
+  }
+}
+
+// Get repo metadata using environment token (legacy/fallback)
 export async function getRepoMetadata(owner, repo) {
   try {
     // 1. Basic Info (Age, Size)
