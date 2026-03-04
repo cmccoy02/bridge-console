@@ -15,8 +15,8 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ score, label, grade, status }) 
   ];
 
   // Color based on score/grade
-  let color = '#ff5e00'; // Default Apex Orange
-  let statusColor = 'text-orange-400';
+  let color = '#ef4444'; // Red for critical (score < 60)
+  let statusColor = 'text-red-400';
 
   if (score >= 90) {
     color = '#3b82f6'; // Blue for excellent
@@ -30,9 +30,6 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ score, label, grade, status }) 
   } else if (score >= 60) {
     color = '#f97316'; // Orange for poor
     statusColor = 'text-orange-400';
-  } else {
-    color = '#ef4444'; // Red for critical
-    statusColor = 'text-red-400';
   }
 
   const COLORS = [color, '#121212'];

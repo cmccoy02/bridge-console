@@ -73,6 +73,7 @@ const RepositoryCard: React.FC<RepositoryCardProps> = ({ repo, onClick, onDiscon
   }
 
   const lastScan = repo.lastScanDate ? new Date(repo.lastScanDate) : null;
+  // eslint-disable-next-line -- Date.now() is safe to call during render for calculating relative time
   const daysSince = lastScan ? Math.floor((Date.now() - lastScan.getTime()) / (1000 * 60 * 60 * 24)) : null;
 
   return (
