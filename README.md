@@ -23,7 +23,9 @@ npm run dev                    # http://localhost:3000
 Choose **Continue as local developer**. The first sign-in creates demo data. With no
 `DATABASE_URL`, the console uses an embedded Postgres stored in `.data/pglite`.
 
-To record real runs from the CLI, create an API key under **Settings**, then:
+To record real runs from the CLI, create an API key under **Settings**, then run
+Bridge in a clone of a GitHub repository. (In production, keys only record runs for
+repositories the GitHub App can access; local development accepts any.)
 
 ```bash
 export BRIDGE_API_URL=http://localhost:3000

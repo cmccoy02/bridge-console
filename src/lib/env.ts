@@ -23,7 +23,10 @@ export function oidcAudience(): string {
 }
 
 export function trustedWorkflows(): string[] {
-  const raw = read('BRIDGE_TRUSTED_WORKFLOWS') || 'cmccoy02/bridge-cli/.github/workflows/bridge.yml@';
+  // Only Bridge's reusable workflow from its main branch or a release tag.
+  const raw =
+    read('BRIDGE_TRUSTED_WORKFLOWS') ||
+    'cmccoy02/bridge-cli/.github/workflows/bridge.yml@refs/heads/main,cmccoy02/bridge-cli/.github/workflows/bridge.yml@refs/tags/';
   return raw
     .split(',')
     .map((entry) => entry.trim())

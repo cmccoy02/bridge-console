@@ -46,8 +46,9 @@ function sampleReport(overrides: Record<string, unknown> = {}) {
 beforeAll(async () => {
   await installTestJwks();
   const db = await getDb();
-  const [account] = await db.insert(schema.accounts).values({ login: 'acme', type: 'Organization' }).returning();
+  const [account] = await db.insert(schema.accounts).values({ login: 'acme', type: 'Organization', installationId: 55 }).returning();
   accountId = account.id;
+  await db.insert(schema.repos).values({ accountId, githubRepoId: 3003, fullName: 'acme/local-app' });
   apiKey = (await createApiKey(accountId, 'laptop', null)).key;
 });
 
@@ -126,6 +127,11 @@ describe('run ingestion', () => {
     expect(run.ciRunUrl).toBe('https://github.com/acme/web/actions/runs/1');
     expect(github.slack).toHaveLength(1);
     expect(github.slack[0]).toMatch(/held updates in \*acme\/web\*/);
+  });
+
+  it('refuses API-key runs for repositories outside the installation', async () => {
+    const report = sampleReport({ run: { id: 'patch-unknown-repo', status: 'pushed' }, repository: { fullName: 'acme/not-installed' } });
+    await expect(ingestRun(apiKey, { report })).rejects.toMatchObject({ status: 403 });
   });
 
   it('rejects bad input and bad credentials', async () => {

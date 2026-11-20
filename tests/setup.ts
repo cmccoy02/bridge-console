@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 process.env.PGLITE_DATA_DIR = 'memory://';
 delete process.env.DATABASE_URL;
 process.env.BRIDGE_PUBLIC_URL = 'https://bridge.test';
-process.env.BRIDGE_TRUSTED_WORKFLOWS = 'cmccoy02/bridge-cli/.github/workflows/bridge.yml@';
+process.env.BRIDGE_TRUSTED_WORKFLOWS = 'cmccoy02/bridge-cli/.github/workflows/bridge.yml@refs/heads/main,cmccoy02/bridge-cli/.github/workflows/bridge.yml@refs/tags/';
 process.env.GITHUB_APP_ID = '123';
 process.env.GITHUB_APP_SLUG = 'bridge-test';
 process.env.GITHUB_APP_CLIENT_ID = 'Iv1.test';

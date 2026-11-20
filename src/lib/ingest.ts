@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { recordEvent, resolveInstalledRepo } from './accounts';
 import { verifyApiKey } from './api-keys';
 import { getDb, schema } from './db';
-import { oidcAudience, publicUrl, trustedWorkflows } from './env';
+import { devLoginEnabled, oidcAudience, publicUrl, trustedWorkflows } from './env';
 import { HttpError } from './http';
 import { isTrustedWorkflow, verifyActionsToken } from './oidc';
 import { notifyAccount, runMessage } from './slack';
@@ -218,24 +218,30 @@ async function resolveUploader(bearer: string, report: BridgeReport) {
       );
     }
 
-    const [existing] = await db
+    let [repo] = await db
       .select()
       .from(schema.repos)
       .where(sql`lower(${schema.repos.fullName}) = lower(${fullName})`)
       .limit(1);
 
-    if (existing && existing.accountId !== key.accountId) {
+    // Local development without a GitHub App: let keys add repositories on the fly.
+    if (!repo && devLoginEnabled()) {
+      [repo] = await db.insert(schema.repos).values({ accountId: key.accountId, fullName, private: true }).returning();
+    }
+
+    // Keys only record runs for repositories the account's GitHub App installation
+    // covers, so nobody can attach runs to a repository they don't control.
+    if (!repo || repo.removedAt) {
+      throw new HttpError(
+        403,
+        `${fullName} is not covered by your Bridge GitHub App installation. Give the app access to it, then run again.`
+      );
+    }
+
+    if (repo.accountId !== key.accountId) {
       throw new HttpError(403, `${fullName} belongs to a different Bridge account.`);
     }
 
-    const repo =
-      existing ||
-      (
-        await db
-          .insert(schema.repos)
-          .values({ accountId: key.accountId, fullName, private: true })
-          .returning()
-      )[0];
     return { accountId: key.accountId, repo, source: 'local' as const };
   }
 
