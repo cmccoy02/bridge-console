@@ -33,6 +33,19 @@ export function trustedWorkflows(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Demo mode: Vercel preview deployments (or BRIDGE_DEMO=1) without a database. Everyone
+ * is signed in as a demo user and the database is in memory, seeded with sample data.
+ * Never active when DATABASE_URL is set, so it can't expose real data.
+ */
+export function demoMode(): boolean {
+  if (read('DATABASE_URL')) {
+    return false;
+  }
+
+  return read('VERCEL_ENV') === 'preview' || read('BRIDGE_DEMO') === '1';
+}
+
 export function devLoginEnabled(): boolean {
   return read('BRIDGE_DEV_LOGIN') === '1' && process.env.NODE_ENV !== 'production';
 }
@@ -44,7 +57,7 @@ export function sessionSecret(): Uint8Array {
     return new TextEncoder().encode(secret);
   }
 
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' && !demoMode()) {
     throw new Error('SESSION_SECRET must be set (32+ characters) in production.');
   }
 
@@ -64,7 +77,7 @@ export function encryptionKey(): Buffer {
     return key;
   }
 
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' && !demoMode()) {
     throw new Error('ENCRYPTION_KEY must be set in production.');
   }
 

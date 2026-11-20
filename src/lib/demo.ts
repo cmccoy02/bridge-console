@@ -1,5 +1,6 @@
 import { count, eq } from 'drizzle-orm';
 
+import { signInAsDeveloper } from './auth';
 import { getDb, schema } from './db';
 import { storeRun, type BridgeReport } from './ingest';
 
@@ -212,4 +213,17 @@ export async function seedDemoData() {
     .set({ state: 'merged', mergedAt: new Date(Date.now() - 7 * DAY), mergedBy: 'jordan-acme' })
     .where(eq(schema.pullRequests.number, 88));
   return true;
+}
+
+let demoUser: ReturnType<typeof signInAsDeveloper> | null = null;
+
+/** Demo mode: seed once per server instance and return the shared demo user. */
+export function ensureDemoUser() {
+  demoUser ??= seedDemoData()
+    .then(() => signInAsDeveloper())
+    .catch((error) => {
+      demoUser = null;
+      throw error;
+    });
+  return demoUser;
 }

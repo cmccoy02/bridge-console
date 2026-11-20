@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import type { User } from '@/lib/db/schema';
+import { demoMode } from '@/lib/env';
 
 const NAV = [
   { href: '/repos', label: 'Repositories' },
@@ -11,6 +12,8 @@ const NAV = [
 ];
 
 export function Shell({ user, active, children }: { user: User; active: string; children: ReactNode }) {
+  const demo = demoMode();
+
   return (
     <>
       <header className="bg-steel text-white border-b-[3px] border-signal">
@@ -37,15 +40,24 @@ export function Shell({ user, active, children }: { user: User; active: string; 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.avatarUrl} alt="" width={24} height={24} className="rounded-full" />
             ) : null}
-            <span className="text-white/85">{user.login}</span>
-            <form action="/api/auth/signout" method="post">
-              <button type="submit" className="cursor-pointer text-white/70 hover:text-white">
-                Sign out
-              </button>
-            </form>
+            <span className="text-white/85">{demo ? 'Demo' : user.login}</span>
+            {demo ? null : (
+              <form action="/api/auth/signout" method="post">
+                <button type="submit" className="cursor-pointer text-white/70 hover:text-white">
+                  Sign out
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </header>
+      {demo ? (
+        <p className="border-b border-rule bg-white">
+          <span className="mx-auto block max-w-6xl px-5 py-2 text-sm text-slate">
+            Demo with sample data. Anything you change disappears when this preview restarts.
+          </span>
+        </p>
+      ) : null}
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
     </>
   );

@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 
+import { demoMode } from '../env';
 import * as schema from './schema';
 
 export { schema };
@@ -33,7 +34,10 @@ async function createDb(): Promise<Database> {
   const { PGlite } = await import('@electric-sql/pglite');
   const { drizzle } = await import('drizzle-orm/pglite');
   const { migrate } = await import('drizzle-orm/pglite/migrator');
-  const dataDir = process.env.PGLITE_DATA_DIR || path.join(process.cwd(), '.data', 'pglite');
+  // Demo mode always uses a throwaway in-memory database (see demoMode in env.ts).
+  const dataDir = demoMode()
+    ? 'memory://'
+    : process.env.PGLITE_DATA_DIR || path.join(process.cwd(), '.data', 'pglite');
 
   if (!dataDir.startsWith('memory://')) {
     await fs.mkdir(dataDir, { recursive: true });
