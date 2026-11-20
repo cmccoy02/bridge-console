@@ -8,14 +8,17 @@ straight from the provider into Vercel's environment settings or a local file.
 1. In your Supabase project, open **Connect**.
 2. Copy the **Transaction pooler** connection string (port `6543`). This is
    `DATABASE_URL`.
-3. Copy the **Session pooler** (or direct) connection string. This is
-   `DATABASE_MIGRATION_URL`; migrations need a session connection.
+3. Copy the **Session pooler** connection string (port `5432` on the pooler host).
+   This is `DATABASE_MIGRATION_URL`; migrations need a session connection. Don't
+   use the direct connection: it is IPv6-only and Vercel builds can't reach it.
 
 ## 2. Deploy to Vercel
 
 1. **Add New → Project**, import `cmccoy02/bridge-console`, branch `v2` (or `main`
    after merging).
-2. Build command: `npm run db:migrate && npm run build`.
+2. Leave the build settings alone: `vercel.json` in this repo sets the framework
+   (Next.js), install and build commands, and overrides anything left over from
+   the old Vite dashboard if you reuse that Vercel project.
 3. Environment variables:
 
    | Name | Value |
