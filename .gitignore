@@ -1,48 +1,14 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
 node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-tasks.md
-components/today.md
-today.md
-claude.md
-massive-update.md
-SYSPRMPT.md
-
-
-# Bridge-specific
-temp_scans/
-bridge.sqlite
+.next
+out
+.data
 .env
-bridge-metrics.json
-
-# Electron Specific
-release/
-
-# Cursor Specific
-.cursorignore
-.cursorrules
-
-# Claude Specific
-.claude/
+.env.local
+.env.*.local
+.env.github-app
+*.pem
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.vercel
+coverage

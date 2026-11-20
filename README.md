@@ -1,57 +1,46 @@
-# Bridge
+# Bridge console
 
-**Automated dependency updates with confidence.**
+The hosted half of Bridge. The [Bridge CLI](https://github.com/cmccoy02/bridge-cli)
+does the work (update, check, open a PR); the console is where teams see it and where
+the CLI gets permission to push.
 
-Bridge analyzes your repositories for outdated dependencies and creates PRs to update them - but only if the updates pass your build and tests.
+- **GitHub App**: Bridge's bot identity. Installed per organization; no secrets in
+  customer repositories.
+- **Token broker**: `POST /api/v1/github/token` exchanges a GitHub Actions OIDC token
+  from Bridge's publish job for a one-hour token scoped to that single repository.
+- **Run ledger**: `POST /api/v1/runs` stores each `bridge-report.v1`. Pages show
+  repositories, every run, held updates and why, and pull requests through merge.
+- **Slack**: posts when Bridge opens, holds back or gets a pull request merged.
 
-## Quick Start
-
-### 1. Install the GitHub App
-
-**[Install Bridge](https://github.com/apps/bridge-console-dev)** on your repositories.
-
-### 2. Run Bridge
+## Local development
 
 ```bash
-git clone https://github.com/cmccoy02/bridge-console.git
-cd bridge-console
 npm install
-npm start
+cp .env.example .env.local     # BRIDGE_DEV_LOGIN=1 is already set
+npm run dev                    # http://localhost:3000
 ```
 
-### 3. Sign in and scan
+Choose **Continue as local developer**. The first sign-in creates demo data. With no
+`DATABASE_URL`, the console uses an embedded Postgres stored in `.data/pglite`.
 
-1. Click **Sign in with GitHub**
-2. Add a repository URL
-3. Click **Run minor/patch updates** to create a PR
-
-## What Bridge Does
-
-- Scans repositories for outdated, unused, and deprecated dependencies
-- Calculates a health score across 4 dimensions
-- Creates PRs for safe minor/patch updates
-- Validates updates pass build/lint/tests before creating PRs
-
-## Testing Checklist
-
-When testing Bridge, please note:
-
-- [ ] GitHub App installation worked
-- [ ] Sign-in flow completed
-- [ ] Repository scan completed
-- [ ] Update job created a PR
-- [ ] Any errors encountered (check logs in the UI)
-
-Report issues at [github.com/cmccoy02/bridge-console/issues](https://github.com/cmccoy02/bridge-console/issues)
-
-## Development
+To record real runs from the CLI, create an API key under **Settings**, then:
 
 ```bash
-npm start          # Electron app with backend
-npm run dev        # Web frontend only (port 3000)
-npm run server     # Backend only (port 3001)
+export BRIDGE_API_URL=http://localhost:3000
+export BRIDGE_API_TOKEN=brk_...
+bridge patch
 ```
 
-## License
+```bash
+npm test          # Vitest; in-memory database, fake GitHub API
+npm run typecheck
+npm run build
+```
 
-MIT
+## Deploying
+
+See [docs/setup.md](docs/setup.md): Supabase, Vercel, the GitHub App (one command)
+and Slack.
+
+The previous scoring dashboard (React + Express + Electron) remains in this
+repository's history on `main`.
