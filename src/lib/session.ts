@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { getDb, schema } from './db';
-import { sessionSecret } from './env';
+import { demoMode, sessionSecret } from './env';
 
 const SESSION_COOKIE = 'bridge_session';
 const SESSION_DAYS = 30;
@@ -47,6 +47,11 @@ export async function clearSession() {
 }
 
 export async function getSessionUser() {
+  if (demoMode()) {
+    const { ensureDemoUser } = await import('./demo');
+    return ensureDemoUser();
+  }
+
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
 
